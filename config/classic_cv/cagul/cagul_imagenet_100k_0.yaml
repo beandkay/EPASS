@@ -15,15 +15,11 @@ hard_label: True
 thresh_warmup: True
 p_cutoff: 0.7
 ulb_loss_ratio: 1.0
-ece_loss_ratio: 2.0
 uratio: 1
 T: 0.5
 dist_align: True
 contrastive_T: 0.1
-p_cutoff: 0.95
-ulb_loss_ratio: 1.0
 proj_size: 128
-uratio: 7
 ema_m: 0.999
 ema_p: 0.999
 crop_ratio: 0.875
