@@ -59,6 +59,15 @@ def get_imagenet(args, alg, name, num_labels, num_classes, data_dir='./data'):
         transforms.Normalize(mean['imagenet'], std['imagenet'])
     ])
 
+    transform_medium = transforms.Compose([
+        transforms.Resize((int(math.floor(img_size / crop_ratio)), int(math.floor(img_size / crop_ratio)))),
+        RandomResizedCropAndInterpolation((img_size, img_size)),
+        transforms.RandomHorizontalFlip(),
+        RandAugment(1, 10),
+        transforms.ToTensor(),
+        transforms.Normalize(mean['imagenet'], std['imagenet'])
+    ])
+
     transform_strong = transforms.Compose([
         transforms.Resize((int(math.floor(img_size / crop_ratio)), int(math.floor(img_size / crop_ratio)))),
         RandomResizedCropAndInterpolation((img_size, img_size)),
@@ -79,7 +88,7 @@ def get_imagenet(args, alg, name, num_labels, num_classes, data_dir='./data'):
 
     lb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, ulb=False, alg=alg, num_labels=num_labels)
 
-    ulb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, alg=alg, ulb=True, strong_transform=transform_strong)
+    ulb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, alg=alg, ulb=True, medium_transform=transform_medium, strong_transform=transform_strong)
 
     eval_dset = ImagenetDataset(root=os.path.join(data_dir, "val"), transform=transform_val, alg=alg, ulb=False)
 
@@ -88,7 +97,7 @@ def get_imagenet(args, alg, name, num_labels, num_classes, data_dir='./data'):
 
 
 class ImagenetDataset(BasicDataset, ImageFolder):
-    def __init__(self, root, transform, ulb, alg, strong_transform=None, num_labels=-1):
+    def __init__(self, root, transform, ulb, alg, medium_transform=None, strong_transform=None, num_labels=-1):
         self.alg = alg
         self.is_ulb = ulb
         self.num_labels = num_labels
@@ -113,10 +122,14 @@ class ImagenetDataset(BasicDataset, ImageFolder):
         self.data = samples
         self.targets = [s[1] for s in samples]
 
+        self.medium_transform = medium_transform
+        if self.medium_transform is None:
+            if self.is_ulb:
+                assert self.alg not in ['sequencematch'], f"alg {self.alg} requires strong augmentation"
         self.strong_transform = strong_transform
         if self.strong_transform is None:
             if self.is_ulb:
-                assert self.alg not in ['fullysupervised', 'supervised', 'pseudolabel', 'vat', 'pimodel', 'meanteacher', 'mixmatch'], f"alg {self.alg} requires strong augmentation"
+                assert self.alg not in ['fullysupervised', 'supervised', 'pseudolabel', 'vat', 'pimodel', 'meanteacher', 'mixmatch', 'refixmatch'], f"alg {self.alg} requires strong augmentation"
 
 
     def __sample__(self, index):

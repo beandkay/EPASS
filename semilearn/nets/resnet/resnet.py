@@ -248,6 +248,6 @@ class ResNet50(nn.Module):
         x = self.layer4(x)
         return x
 
-def resnet50(pretrained=False, **kwargs):
+def resnet50(pretrained=False, pretrained_path=None, **kwargs):
     model = ResNet50(**kwargs)
     return model

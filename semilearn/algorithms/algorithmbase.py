@@ -14,7 +14,6 @@ from torch.cuda.amp import autocast, GradScaler
 from semilearn.datasets import DistributedSampler
 from semilearn.algorithms.utils import Bn_Controller, EMA
 
-
 class AlgorithmBase:
     """
         Base class for algorithms
@@ -152,7 +151,7 @@ class AlgorithmBase:
         if self.ema is not None:
             self.ema.update()
 
-    def train_step(self, idx_lb, x_lb, y_lb, idx_ulb, x_ulb_w, x_ulb_s):
+    def train_step(self, idx_lb, x_lb, y_lb, idx_ulb, x_ulb_w, x_ulb_m, x_ulb_s):
         """
         train_step specific to each algorithm
         """
@@ -300,10 +299,12 @@ class AlgorithmBase:
 
                 num_batch = y.shape[0]
                 total_num += num_batch
-                if self.algorithm in ['crmatch', 'comatch', 'simmatch']:
+                if self.algorithm in ['crmatch', 'comatch', 'simmatch', 'cagul']:
                     logits, *_ = self.model(x)
                 else:
                     logits = self.model(x)
+                if self.algorithm == 'somematch':
+                    logits = sum(logits)/len(logits)
                 loss = F.cross_entropy(logits, y, reduction='mean')
                 y_true.extend(y.cpu().tolist())
                 y_pred.extend(torch.max(logits, dim=-1)[1].cpu().tolist())

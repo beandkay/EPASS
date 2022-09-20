@@ -18,12 +18,17 @@ from .fullysupervised import FullySupervised
 from .comatch import CoMatch
 from .simmatch import SimMatch
 from .adamatch import AdaMatch
+from .refixmatch import ReFixMatch
+from .sequencematch import SequenceMatch
+from .somematch import SomeMatch
+from .cagul import CAGUL
 
 # if any new alg., please append the dict
 name2alg = {
     'fullysupervised': FullySupervised,
     'supervised': FullySupervised,
     'fixmatch': FixMatch,
+    'refixmatch': ReFixMatch,
     'flexmatch': FlexMatch,
     'adamatch': AdaMatch,
     'pimodel': PiModel,
@@ -37,7 +42,10 @@ name2alg = {
     'comatch': CoMatch,
     'simmatch': SimMatch,
     'dash': Dash,
-    'mpl': MPL
+    'mpl': MPL,
+    'sequencematch': SequenceMatch,
+    'somematch': SomeMatch,
+    'cagul': CAGUL
 }
 
 

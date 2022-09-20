@@ -147,8 +147,35 @@ def smooth_targets(logits, targets, smoothing=0.1):
         true_dist.scatter_(1, targets.data.unsqueeze(1), (1 - smoothing))
     return true_dist
 
+def bdc_loss(logits, targets, use_hard_labels=True, reduction='none'):
+    
+    if use_hard_labels:
+        log_pred = F.log_softmax(logits, dim=-1)
+        return F.nll_loss(log_pred, targets, reduction=reduction)
+        # return F.cross_entropy(logits, targets, reduction=reduction) this is unstable
+    else:
+        assert logits.shape == targets.shape
+        log_pred = F.log_softmax(logits, dim=-1)
+        nll_loss = torch.sum(-targets * log_pred, dim=1)
+        if reduction == 'none':
+            return nll_loss
+        else:
+            return nll_loss.mean()
 
+def tf_nkd_loss(logits, targets, T=3):
+    log_softmax_outputs = F.log_softmax(logits/T, dim=1)
+    softmax_targets = F.softmax(targets/T, dim=1)
+    return (-log_softmax_outputs - (logits + softmax_targets - logits.mean()) * log_softmax_outputs).sum(dim=1).mean()
 
+def distillation_loss(source, target):
+    loss = F.mse_loss(source, target, reduction="none")
+    loss = loss * ((source > target) | (target > 0)).float()
+    return loss.mean()
+
+def soft_ce_loss(logits, targets, T=3):
+    log_softmax_outputs = F.log_softmax(logits/T, dim=1)
+    softmax_targets = F.softmax(targets/T, dim=1)
+    return -(log_softmax_outputs * softmax_targets).sum(dim=1).mean()
 
 def ce_loss(logits, targets, use_hard_labels=True, reduction='none'):
     """
@@ -174,7 +201,7 @@ def ce_loss(logits, targets, use_hard_labels=True, reduction='none'):
             return nll_loss.mean()
 
 
-def consistency_loss(logits_s, logits_w, name='ce', use_hard_labels=True, T=0.5, mask=None, label_smoothing=0.0, softmax=True):
+def consistency_loss(logits_s, logits_w, name='ce', use_hard_labels=True, T=0.5, mask=None, label_smoothing=0.0, softmax=True, refixmatch=False):
     """
     wrapper for consistency regularization loss in semi-supervised learning.
 
@@ -215,6 +242,10 @@ def consistency_loss(logits_s, logits_w, name='ce', use_hard_labels=True, T=0.5,
     if mask is not None:
         # mask must not be boolean type
         loss = loss * mask
+        if refixmatch:
+            kld = F.kl_div(F.softmax(logits_s, dim=-1).log(), F.softmax(logits_w / 0.5, dim=-1).detach(), reduction='none').sum(dim=1, keepdim=False)
+            kld = torch.mean(kld * (1.0 - mask))
+            loss = loss + kld
 
     return loss.mean(), pseudo_label
 
@@ -246,3 +277,60 @@ def distribution_alignment():
 # TODO: mixup
 def mixup():
     pass
+
+
+def compute_calibration(true_labels, pred_labels, confidences, num_bins=10):
+    """Collects predictions into bins used to draw a reliability diagram.
+    Arguments:
+        true_labels: the true labels for the test examples
+        pred_labels: the predicted labels for the test examples
+        confidences: the predicted confidences for the test examples
+        num_bins: number of bins
+    The true_labels, pred_labels, confidences arguments must be NumPy arrays;
+    pred_labels and true_labels may contain numeric or string labels.
+    For a multi-class model, the predicted label and confidence should be those
+    of the highest scoring class.
+    Returns a dictionary containing the following NumPy arrays:
+        accuracies: the average accuracy for each bin
+        confidences: the average confidence for each bin
+        counts: the number of examples in each bin
+        bins: the confidence thresholds for each bin
+        avg_accuracy: the accuracy over the entire test set
+        avg_confidence: the average confidence over the entire test set
+        expected_calibration_error: a weighted average of all calibration gaps
+        max_calibration_error: the largest calibration gap across all bins
+    """
+    assert(len(confidences) == len(pred_labels))
+    assert(len(confidences) == len(true_labels))
+    assert(num_bins > 0)
+
+    bin_size = 1.0 / num_bins
+    bins = torch.linspace(0.0, 1.0, num_bins + 1).cuda()
+    indices = torch.bucketize(confidences, bins, right=True).cuda()
+
+    bin_accuracies = torch.zeros(num_bins, dtype=torch.float).cuda()
+    bin_confidences = torch.zeros(num_bins, dtype=torch.float).cuda()
+    bin_counts = torch.zeros(num_bins, dtype=torch.int).cuda()
+
+    for b in range(num_bins):
+        selected = torch.where(indices == b + 1)[0]
+        if len(selected) > 0:
+            bin_accuracies[b] = torch.mean((true_labels[selected] == pred_labels[selected]).float())
+            bin_confidences[b] = torch.mean(confidences[selected])
+            bin_counts[b] = len(selected)
+
+    avg_acc = torch.sum(bin_accuracies * bin_counts) / torch.sum(bin_counts)
+    avg_conf = torch.sum(bin_confidences * bin_counts) / torch.sum(bin_counts)
+
+    gaps = torch.abs(bin_accuracies - bin_confidences)
+    ece = torch.sum(gaps * bin_counts) / torch.sum(bin_counts)
+    mce = torch.max(gaps)
+
+    return { "accuracies": bin_accuracies, 
+             "confidences": bin_confidences, 
+             "counts": bin_counts, 
+             "bins": bins,
+             "avg_accuracy": avg_acc,
+             "avg_confidence": avg_conf,
+             "expected_calibration_error": ece,
+             "max_calibration_error": mce }
