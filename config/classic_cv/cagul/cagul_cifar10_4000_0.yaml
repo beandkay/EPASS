@@ -29,7 +29,7 @@ momentum: 0.9
 weight_decay: 0.0005
 amp: False
 clip: 0.0
-use_cat: True
+use_cat: False
 net: wrn_28_2
 net_from_name: False
 data_dir: ./data
