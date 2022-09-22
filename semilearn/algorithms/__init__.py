@@ -21,7 +21,7 @@ from .adamatch import AdaMatch
 from .refixmatch import ReFixMatch
 from .sequencematch import SequenceMatch
 from .somematch import SomeMatch
-from .cagul import CAGUL
+from .cocoa import COCOA
 
 # if any new alg., please append the dict
 name2alg = {
@@ -45,7 +45,7 @@ name2alg = {
     # 'mpl': MPL
     'sequencematch': SequenceMatch,
     'somematch': SomeMatch,
-    'cagul': CAGUL
+    'cocoa': COCOA
 }
 
 def get_algorithm(args, net_builder, tb_log, logger):

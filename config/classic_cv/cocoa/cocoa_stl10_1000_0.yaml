@@ -1,8 +1,8 @@
-algorithm: cagul
+algorithm: cocoa
 save_dir: ./saved_models/classic_cv
-save_name: cagul_stl10_1000_0
+save_name: cocoa_stl10_1000_0
 resume: True
-load_path: ./saved_models/classic_cv/cagul_stl10_1000_0/latest_model.pth
+load_path: ./saved_models/classic_cv/cocoa_stl10_1000_0/latest_model.pth
 overwrite: True
 use_tensorboard: True
 epoch: 1024

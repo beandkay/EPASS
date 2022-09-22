@@ -114,9 +114,9 @@ class SoftSupConLoss(nn.Module):
 
         return loss
 
-class CAGUL_Net(nn.Module):
+class COCOA_Net(nn.Module):
     def __init__(self, base, proj_size=128):
-        super(CAGUL_Net, self).__init__()
+        super(COCOA_Net, self).__init__()
         self.backbone = base
         self.feat_planes = base.num_features
         
@@ -141,9 +141,9 @@ class CAGUL_Net(nn.Module):
         matcher = self.backbone.group_matcher(coarse, prefix='backbone.')
         return matcher
 
-class CAGUL(AlgorithmBase):
+class COCOA(AlgorithmBase):
     """
-        CAGUL algorithm (https://arxiv.org/abs/2001.07685).
+        COCOA algorithm (https://arxiv.org/abs/2001.07685).
 
         Args:
             - args (`argparse`):
@@ -163,7 +163,7 @@ class CAGUL(AlgorithmBase):
     """
     def __init__(self, args, net_builder, tb_log=None, logger=None):
         super().__init__(args, net_builder, tb_log, logger) 
-        # cagul specificed arguments
+        # cocoa specificed arguments
         self.init(T=args.T, p_cutoff=args.p_cutoff, hard_label=args.hard_label, dist_align=args.dist_align, ema_p=args.ema_p)
         self.contrastive_criterion = SoftSupConLoss(temperature=self.args.contrastive_T).cuda()
         
@@ -184,12 +184,12 @@ class CAGUL(AlgorithmBase):
         
     def set_model(self): 
         model = super().set_model()
-        model = CAGUL_Net(model, proj_size=self.args.proj_size)
+        model = COCOA_Net(model, proj_size=self.args.proj_size)
         return model
     
     def set_ema_model(self):
         ema_model = self.net_builder(num_classes=self.num_classes)
-        ema_model = CAGUL_Net(ema_model, proj_size=self.args.proj_size)
+        ema_model = COCOA_Net(ema_model, proj_size=self.args.proj_size)
         ema_model.load_state_dict(self.model.state_dict())
         return ema_model    
 
