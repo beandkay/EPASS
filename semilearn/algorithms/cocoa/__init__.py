@@ -1,4 +1,4 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from .cagul import CAGUL
+from .cocoa import COCOA
