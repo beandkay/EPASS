@@ -31,7 +31,7 @@ momentum: 0.9
 weight_decay: 0.0003
 amp: True
 clip: 0.0
-use_cat: False
+use_cat: True
 net: resnet50
 net_from_name: False
 data_dir: /home/
