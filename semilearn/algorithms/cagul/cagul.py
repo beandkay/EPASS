@@ -198,9 +198,9 @@ class CAGUL(AlgorithmBase):
                 _, _, features_x_ulb_w, features_x_ulb_s = feats.chunk(4)
             else:
                 outs_x_lb_w = self.model(x_lb_w)
-                logits_x_lb_w  = outs_x_lb_w['logits']
+                logits_x_lb_w, _  = outs_x_lb_w['logits'], outs_x_lb_w['feat']
                 outs_x_lb_s = self.model(x_lb_s)
-                logits_x_lb_s  = outs_x_lb_s['logits']
+                logits_x_lb_s, _  = outs_x_lb_s['logits'], outs_x_lb_s['feat']
                 outs_x_ulb_s = self.model(x_ulb_s)
                 logits_x_ulb_s, features_x_ulb_s = outs_x_ulb_s['logits'], outs_x_ulb_s['feat']                
                 with torch.no_grad():
