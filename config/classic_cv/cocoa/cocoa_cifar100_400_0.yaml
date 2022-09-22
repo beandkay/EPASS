@@ -8,6 +8,7 @@ use_tensorboard: True
 epoch: 1024
 num_train_iter: 1048576
 num_eval_iter: 5120
+num_log_iter: 5120
 num_labels: 400
 batch_size: 64
 eval_batch_size: 256
@@ -27,7 +28,7 @@ optim: SGD
 lr: 0.03
 momentum: 0.9
 weight_decay: 0.001
-amp: False
+amp: True
 clip: 0.0
 use_cat: False
 net: wrn_28_8
