@@ -165,11 +165,6 @@ class CAGUL(AlgorithmBase):
         super().__init__(args, net_builder, tb_log, logger) 
         # cagul specificed arguments
         self.init(T=args.T, p_cutoff=args.p_cutoff, hard_label=args.hard_label, dist_align=args.dist_align, ema_p=args.ema_p)
-        # warp model
-        backbone = self.model
-        self.model = CAGUL_Net(backbone, proj_size=self.args.proj_size)
-        self.ema_model = CAGUL_Net(self.ema_model, proj_size=self.args.proj_size)
-        self.ema_model.load_state_dict(self.model.state_dict())
         self.contrastive_criterion = SoftSupConLoss(temperature=self.args.contrastive_T).cuda()
         
     def init(self, p_cutoff, T, hard_label=True, dist_align=True, ema_p=0.999):
@@ -179,7 +174,6 @@ class CAGUL(AlgorithmBase):
         self.dist_align = dist_align
         self.ema_p = ema_p
 
-
     def set_hooks(self):
         self.register_hook(PseudoLabelingHook(), "PseudoLabelingHook")
         self.register_hook(
@@ -187,6 +181,18 @@ class CAGUL(AlgorithmBase):
             "DistAlignHook")
         self.register_hook(COCOAThresholdingHook(), "MaskingHook")
         super().set_hooks()
+        
+    def set_model(self): 
+        model = super().set_model()
+        model = CAGUL_Net(model, proj_size=self.args.proj_size)
+        return model
+    
+    def set_ema_model(self):
+        ema_model = self.net_builder(num_classes=self.num_classes)
+        ema_model = CAGUL_Net(ema_model, proj_size=self.args.proj_size)
+        ema_model.load_state_dict(self.model.state_dict())
+        return ema_model    
+
     
     def train_step(self, x_lb_w, x_lb_s, y_lb, x_ulb_w, x_ulb_s):
         num_lb = y_lb.shape[0]
@@ -210,7 +216,6 @@ class CAGUL(AlgorithmBase):
                     outs_x_ulb_w = self.model(x_ulb_w)
                     logits_x_ulb_w, features_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
 
-            print(logits_x_lb_w.shape)
             sup_loss = ce_loss(logits_x_lb_w, y_lb, reduction='mean') + ce_loss(logits_x_lb_s, y_lb, reduction='mean')
             probs_x_lb_w = torch.softmax(logits_x_lb_w.detach(), dim=-1)
             probs_x_lb_s = torch.softmax(logits_x_lb_s.detach(), dim=-1)
