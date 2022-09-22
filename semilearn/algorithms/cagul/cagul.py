@@ -135,8 +135,11 @@ class CAGUL_Net(nn.Module):
         feat = self.backbone(x, only_feat=True)
         logits = self.backbone(feat, only_fc=True)
         feat_proj = self.l2norm(self.mlp_proj(feat))
-        result_dict = {'logits':logits, 'feat':feat_proj}
-        return result_dict
+        return {'logits':logits, 'feat':feat_proj}
+
+    def group_matcher(self, coarse=False):
+        matcher = self.backbone.group_matcher(coarse, prefix='backbone.')
+        return matcher
 
 class CAGUL(AlgorithmBase):
     """
@@ -207,6 +210,7 @@ class CAGUL(AlgorithmBase):
                     outs_x_ulb_w = self.model(x_ulb_w)
                     logits_x_ulb_w, features_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
 
+            print(logits_x_lb_w.shape)
             sup_loss = ce_loss(logits_x_lb_w, y_lb, reduction='mean') + ce_loss(logits_x_lb_s, y_lb, reduction='mean')
             probs_x_lb_w = torch.softmax(logits_x_lb_w.detach(), dim=-1)
             probs_x_lb_s = torch.softmax(logits_x_lb_s.detach(), dim=-1)
