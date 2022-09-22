@@ -213,7 +213,7 @@ class AlgorithmBase:
             input_dict[arg] = var
         return input_dict
 
-    def train_step(self, idx_lb, x_lb, y_lb, idx_ulb, x_ulb_w, x_ulb_s):
+    def train_step(self, idx_lb, x_lb_w, y_lb, idx_ulb, x_ulb_w, x_ulb_s):
         """
         train_step specific to each algorithm
         """
