@@ -4,10 +4,11 @@
 # Licensed under the MIT License.
 
 import torch
-from torch.multiprocessing import reductions
 import torch.nn as nn
 import torch.nn.functional as F
-from semilearn.algorithms.algorithmbase import AlgorithmBase
+from .utils import COCOAThresholdingHook
+from semilearn.core import AlgorithmBase
+from semilearn.algorithms.hooks import PseudoLabelingHook, DistAlignEMAHook
 from semilearn.algorithms.utils import ce_loss, consistency_loss,  SSL_Argument, str2bool
 
 class SoftSupConLoss(nn.Module):
@@ -167,33 +168,21 @@ class CAGUL(AlgorithmBase):
         self.ema_model.load_state_dict(self.model.state_dict())
         self.contrastive_criterion = SoftSupConLoss(temperature=self.args.contrastive_T).cuda()
         
-    def init(self, T, p_cutoff, hard_label=True, dist_align=True, ema_p=0.999):
-        self.T = T
+    def init(self, p_cutoff, T, hard_label=True, dist_align=True, ema_p=0.999):
         self.p_cutoff = p_cutoff
+        self.T = T
         self.use_hard_label = hard_label
         self.dist_align = dist_align
         self.ema_p = ema_p
-        self.lb_prob_t = torch.ones((self.args.num_classes)).cuda(self.args.gpu) / self.args.num_classes
-        self.ulb_prob_t = torch.ones((self.args.num_classes)).cuda(self.args.gpu) / self.args.num_classes
-    
-    @torch.no_grad()
-    def update_prob_t(self, lb_probs, ulb_probs):
-        if self.args.distributed and self.args.world_size > 1:
-            lb_probs = self.concat_all_gather(lb_probs)
-            ulb_probs = self.concat_all_gather(ulb_probs)
-        
-        ulb_prob_t = ulb_probs.mean(0)
-        self.ulb_prob_t = self.ema_p * self.ulb_prob_t + (1 - self.ema_p) * ulb_prob_t
 
-        lb_prob_t = lb_probs.mean(0)
-        self.lb_prob_t = self.ema_p * self.lb_prob_t + (1 - self.ema_p) * lb_prob_t
 
-    @torch.no_grad()
-    def distribution_alignment(self, probs):
-        # da
-        probs = probs * (1e-6 + self.lb_prob_t) / (1e-6 + self.ulb_prob_t)
-        probs = probs / probs.sum(dim=1, keepdim=True)
-        return probs.detach()
+    def set_hooks(self):
+        self.register_hook(PseudoLabelingHook(), "PseudoLabelingHook")
+        self.register_hook(
+            DistAlignEMAHook(num_classes=self.num_classes, momentum=self.args.ema_p, p_target_type='model'), 
+            "DistAlignHook")
+        self.register_hook(COCOAThresholdingHook(), "MaskingHook")
+        super().set_hooks()
     
     def train_step(self, x_lb_w, x_lb_s, y_lb, x_ulb_w, x_ulb_s):
         num_lb = y_lb.shape[0]
@@ -202,92 +191,85 @@ class CAGUL(AlgorithmBase):
         with self.amp_cm():
             if self.use_cat:
                 inputs = torch.cat((x_lb_w, x_lb_s, x_ulb_w, x_ulb_s))
-                logits, feats = self.model(inputs)
+                outputs = self.model(inputs)
+                logits, feats = outputs['logits'], outputs['feat']
                 logits_x_lb_w, logits_x_lb_s, logits_x_ulb_w, logits_x_ulb_s = logits.chunk(4)
                 _, _, features_x_ulb_w, features_x_ulb_s = feats.chunk(4)
             else:
-                logits_x_lb_w, _ = self.model(x_lb_w)
-                logits_x_lb_s, _ = self.model(x_lb_s)
-                logits_x_ulb_s, features_x_ulb_s = self.model(x_ulb_s)
+                outs_x_lb_w = self.model(x_lb_w)
+                logits_x_lb_w  = outs_x_lb_w['logits']
+                outs_x_lb_s = self.model(x_lb_s)
+                logits_x_lb_s  = outs_x_lb_s['logits']
+                outs_x_ulb_s = self.model(x_ulb_s)
+                logits_x_ulb_s, features_x_ulb_s = outs_x_ulb_s['logits'], outs_x_ulb_s['feat']                
                 with torch.no_grad():
-                    logits_x_ulb_w, features_x_ulb_w = self.model(x_ulb_w)
+                    outs_x_ulb_w = self.model(x_ulb_w)
+                    logits_x_ulb_w, features_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
 
             sup_loss = ce_loss(logits_x_lb_w, y_lb, reduction='mean') + ce_loss(logits_x_lb_s, y_lb, reduction='mean')
             probs_x_lb_w = torch.softmax(logits_x_lb_w.detach(), dim=-1)
             probs_x_lb_s = torch.softmax(logits_x_lb_s.detach(), dim=-1)
-            max_probs_lb_w, _ = probs_x_lb_w.max(dim=-1)
-            max_probs_lb_s, _ = probs_x_lb_s.max(dim=-1)
-            max_probs_x_ulb_w = torch.softmax(logits_x_ulb_w.detach(), dim=-1)
+            probs_x_ulb_w = torch.softmax(logits_x_ulb_w.detach(), dim=-1)
 
-            # update 
-            self.update_prob_t(max_probs_lb_w, max_probs_x_ulb_w)
+            # distribution alignment 
+            probs_x_ulb_w = self.call_hook("dist_align", "DistAlignHook", probs_x_ulb=probs_x_ulb_w, probs_x_lb=probs_x_lb_w)
 
-            # distribution alignment
-            if self.dist_align:
-                max_probs_x_ulb_w = self.distribution_alignment(max_probs_x_ulb_w)
+            # calculate weight
+            mask = self.call_hook("masking", "MaskingHook", logits_x_lb=probs_x_lb_w, probs_x_lb_s=probs_x_lb_s, logits_x_ulb_w=probs_x_ulb_w, softmax_x_lb=False, softmax_x_ulb=False)
 
-            # compute mask
+            # generate unlabeled targets using pseudo label hook
+            pseudo_label = self.call_hook("gen_ulb_targets", "PseudoLabelingHook", 
+                                          logits=probs_x_ulb_w,
+                                          use_hard_label=self.use_hard_label,
+                                          T=self.T,
+                                          softmax=False)
+
+            # calculate loss
+            unsup_loss = consistency_loss(logits_x_ulb_s,
+                                          pseudo_label,
+                                          'ce',
+                                          mask=mask)
+            
             with torch.no_grad():
-                max_probs = torch.max(max_probs_x_ulb_w, dim=-1)[0]
-                p_cutoff_w = max_probs_lb_w.mean() * self.p_cutoff
-                p_cutoff_s = max_probs_lb_s.mean() * self.p_cutoff
-                mask = torch.logical_and(max_probs.ge(p_cutoff_w), max_probs.ge(p_cutoff_s)).to(max_probs.dtype)
-            
-            unsup_loss, pseudo_label = consistency_loss(logits_x_ulb_s,
-                                             max_probs_x_ulb_w,
-                                             'ce',
-                                             use_hard_labels=self.use_hard_label,
-                                             T=self.T,
-                                             mask=mask)
-            
+                max_probs = torch.max(probs_x_ulb_w, dim=-1)[0]
+                
             features_ulb = torch.cat([features_x_ulb_w.unsqueeze(1), features_x_ulb_s.unsqueeze(1)], dim=1)
             contrastive_loss = self.contrastive_criterion(features_ulb, max_probs, pseudo_label) + \
                 self.contrastive_criterion(features_ulb, pseudo_label)
             
             total_loss = sup_loss + self.lambda_u * unsup_loss + contrastive_loss
-
-        self.parameter_update(total_loss)
+            
+        self.call_hook("param_update", "ParamUpdateHook", loss=total_loss)
 
         tb_dict = {}
         tb_dict['train/sup_loss'] = sup_loss.item()
         tb_dict['train/unsup_loss'] = unsup_loss.item()
         tb_dict['train/contrastive_loss'] = contrastive_loss.item()
         tb_dict['train/total_loss'] = total_loss.item()
-        tb_dict['train/mask_ratio'] = 1.0 - mask.float().mean().item()
+        tb_dict['train/mask_ratio'] = mask.mean().item()
         return tb_dict
 
     def get_save_dict(self):
         save_dict = super().get_save_dict()
         # additional saving arguments
-        save_dict['ulb_prob_t'] = self.ulb_prob_t.cpu()
-        save_dict['lb_prob_t'] = self.lb_prob_t.cpu()
+        save_dict['p_model'] = self.hooks_dict['DistAlignHook'].p_model.cpu()
+        save_dict['p_target'] = self.hooks_dict['DistAlignHook'].p_target.cpu()
         return save_dict
 
 
     def load_model(self, load_path):
         checkpoint = super().load_model(load_path)
-        self.ulb_prob_t = checkpoint['ulb_prob_t'].cuda(self.args.gpu)
-        self.lb_prob_t = checkpoint['lb_prob_t'].cuda(self.args.gpu)
+        self.hooks_dict['DistAlignHook'].p_model = checkpoint['p_model'].cuda(self.args.gpu)
+        self.hooks_dict['DistAlignHook'].p_target = checkpoint['p_target'].cuda(self.args.gpu)
         self.print_fn("additional parameter loaded")
         return checkpoint
-
-    @torch.no_grad()
-    def concat_all_gather(self, tensor):
-        """
-        Performs all_gather operation on the provided tensors.
-        *** Warning ***: torch.distributed.all_gather has no gradient.
-        """
-        tensors_gather = [torch.ones_like(tensor)
-            for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(tensors_gather, tensor)
-
-        output = torch.cat(tensors_gather, dim=0)
-        return output
 
     @staticmethod
     def get_argument():
         return [
             SSL_Argument('--hard_label', str2bool, True),
             SSL_Argument('--T', float, 0.5),
+            SSL_Argument('--dist_align', str2bool, True),
+            SSL_Argument('--ema_p', float, 0.999),
             SSL_Argument('--p_cutoff', float, 0.95),
         ]

@@ -1,118 +1,13 @@
-
-
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
 import torch
-from torch.multiprocessing import reductions
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-from semilearn.algorithms.algorithmbase import AlgorithmBase
-from semilearn.algorithms.utils import ce_loss, consistency_loss,  SSL_Argument, str2bool
+from semilearn.core import AlgorithmBase
+from semilearn.algorithms.hooks import DistAlignQueueHook, FixedThresholdingHook
+from semilearn.algorithms.utils import ce_loss, consistency_loss, SSL_Argument, concat_all_gather
 
-class SoftSupConLoss(nn.Module):
-    """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
-    It also supports the unsupervised contrastive loss in SimCLR"""
-    def __init__(self, temperature=0.07, contrast_mode='all',
-                 base_temperature=0.07):
-        super(SoftSupConLoss, self).__init__()
-        self.temperature = temperature
-        self.contrast_mode = contrast_mode
-        self.base_temperature = base_temperature
-
-    def forward(self, features, max_probs, labels=None, mask=None, reduction="mean", select_matrix=None):
-        """Compute loss for model. If both `labels` and `mask` are None,
-        it degenerates to SimCLR unsupervised loss:
-        https://arxiv.org/pdf/2002.05709.pdf
-        Args:
-            features: hidden vector of shape [bsz, n_views, ...].
-            labels: ground truth of shape [bsz].
-            mask: contrastive mask of shape [bsz, bsz], mask_{i,j}=1 if sample j
-                has the same class as sample i. Can be asymmetric.
-        Returns:
-            A loss scalar.
-        """
-        device = (torch.device('cuda')
-                  if features.is_cuda
-                  else torch.device('cpu'))
-
-        if len(features.shape) < 3:
-            raise ValueError('`features` needs to be [bsz, n_views, ...],'
-                             'at least 3 dimensions are required')
-        if len(features.shape) > 3:
-            features = features.view(features.shape[0], features.shape[1], -1)
-
-        batch_size = features.shape[0]
-        if labels is not None and mask is not None:
-            raise ValueError('Cannot define both `labels` and `mask`')
-        elif labels is None and mask is None:
-            mask = torch.eye(batch_size, dtype=torch.float32).to(device)
-        elif labels is not None and select_matrix is not None:
-            labels = labels.contiguous().view(-1, 1)
-            if labels.shape[0] != batch_size:
-                raise ValueError('Num of labels does not match num of features')
-            mask = torch.eq(labels, labels.T).float().to(device)
-            max_probs = max_probs.contiguous().view(-1, 1)
-            score_mask = torch.matmul(max_probs, max_probs.T)
-            mask = mask.mul(score_mask) * select_matrix
-
-        elif labels is not None:
-            labels = labels.contiguous().view(-1, 1)
-            if labels.shape[0] != batch_size:
-                raise ValueError('Num of labels does not match num of features')
-            mask = torch.eq(labels, labels.T).float().to(device)
-            #max_probs = max_probs.reshape((batch_size,1))
-            max_probs = max_probs.contiguous().view(-1, 1)
-            score_mask = torch.matmul(max_probs,max_probs.T)
-            mask = mask.mul(score_mask)
-        else:
-            mask = mask.float().to(device)
-
-        contrast_count = features.shape[1]
-        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)
-        if self.contrast_mode == 'one':
-            anchor_feature = features[:, 0]
-            anchor_count = 1
-        elif self.contrast_mode == 'all':
-            anchor_feature = contrast_feature
-            anchor_count = contrast_count
-        else:
-            raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
-
-        # compute logits
-        anchor_dot_contrast = torch.div(
-            torch.matmul(anchor_feature, contrast_feature.T),
-            self.temperature)
-        # for numerical stability
-        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
-        logits = anchor_dot_contrast - logits_max.detach()
-
-        # tile mask
-        mask = mask.repeat(anchor_count, contrast_count)
-        # mask-out self-contrast cases
-        logits_mask = torch.scatter(
-            torch.ones_like(mask),
-            1,
-            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
-            0
-        )
-        mask = mask * logits_mask
-        # compute log_prob
-        exp_logits = torch.exp(logits) * logits_mask
-        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
-
-        # compute mean of log-likelihood over positive
-        mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
-
-        # loss
-        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
-        loss = loss.view(anchor_count, batch_size)
-
-        if reduction == "mean":
-            loss = loss.mean()
-
-        return loss
 
 class SomeMatch_Net(nn.Module):
     def __init__(self, base, proj_size=128):
@@ -135,203 +30,212 @@ class SomeMatch_Net(nn.Module):
         feat = self.backbone(x, only_feat=True)
         logits = self.backbone(feat, only_fc=True)
         feat_proj = self.l2norm(self.mlp_proj(feat))
-        return logits, feat_proj 
+        return {'logits':logits, 'feat':feat_proj}
+
+    def group_matcher(self, coarse=False):
+        matcher = self.backbone.group_matcher(coarse, prefix='backbone.')
+        return matcher
 
 class SomeMatch(AlgorithmBase):
     """
-        SomeMatch algorithm (https://arxiv.org/abs/2001.07685).
+    SomeMatch algorithm (https://arxiv.org/abs/2203.06915).
+    Reference implementation (https://github.com/KyleZheng1997/simmatch).
 
-        Args:
-            - args (`argparse`):
-                algorithm arguments
-            - net_builder (`callable`):
-                network loading function
-            - tb_log (`TBLog`):
-                tensorboard logger
-            - logger (`logging.Logger`):
-                logger to use
-            - T (`float`):
-                Temperature for pseudo-label sharpening
-            - p_cutoff(`float`):
-                Confidence threshold for generating pseudo-labels
-            - hard_label (`bool`, *optional*, default to `False`):
-                If True, targets have [Batch size] shape with int values. If False, the target is vector
+    Args:
+        - args (`argparse`):
+            algorithm arguments
+        - net_builder (`callable`):
+            network loading function
+        - tb_log (`TBLog`):
+            tensorboard logger
+        - logger (`logging.Logger`):
+            logger to use
+        - T (`float`):
+            Temperature for pseudo-label sharpening
+        - p_cutoff(`float`):
+            Confidence threshold for generating pseudo-labels
+        - hard_label (`bool`, *optional*, default to `False`):
+            If True, targets have [Batch size] shape with int values. If False, the target is vector
+        - K (`int`, *optional*, default to 128):
+            Length of the memory bank to store class probabilities and embeddings of the past weakly augmented samples
+        - smoothing_alpha (`float`, *optional*, default to 0.999):
+            Weight for a smoothness constraint which encourages taking a similar value as its nearby samples’ class probabilities
+        - da_len (`int`, *optional*, default to 256):
+            Length of the memory bank for distribution alignment.
+        - in_loss_ratio (`float`, *optional*, default to 1.0):
+            Loss weight for simmatch feature loss
     """
     def __init__(self, args, net_builder, tb_log=None, logger=None):
         super().__init__(args, net_builder, tb_log, logger) 
-        # cagul specificed arguments
-        self.init(T=args.T, p_cutoff=args.p_cutoff, hard_label=args.hard_label, dist_align=args.dist_align, ema_p=args.ema_p)
-        # warp model
-        backbone = self.model
-        self.model = SomeMatch_Net(backbone, proj_size=self.args.proj_size)
-        self.ema_model = SomeMatch_Net(self.ema_model, proj_size=self.args.proj_size)
-        self.ema_model.load_state_dict(self.model.state_dict())
-        self.contrastive_criterion = SoftSupConLoss(temperature=self.args.contrastive_T).cuda()
-        
-        r, c = np.tril_indices(self.args.num_classes, -1)
-        assert len(r) == len(c) == (self.args.num_classes * (self.args.num_classes-1)) // 2 
+        # simmatch specificed arguments
+        # adjust k 
+        self.use_ema_teacher = True
+        if args.dataset in ['cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
+            self.use_ema_teacher = False
+            self.ema_bank = 0.7
+        args.K = args.lb_dest_len
+        self.lambda_in = args.in_loss_ratio
+        self.init(T=args.T, p_cutoff=args.p_cutoff, proj_size=args.proj_size, K=args.K, smoothing_alpha=args.smoothing_alpha, da_len=args.da_len)
+    
 
-        binary_labels = np.zeros([self.args.num_classes, len(r)])
-        
-        for y in range(self.args.num_classes):
-            # R is a ground-truth matrix for binary classification problems
-            # if the multiclass label is y (y \in {0, 1, ..., C-1}), then
-            # R[i, j] = 1 if y==i else -1 if y==j else 0 
-            R = np.zeros([self.args.num_classes, self.args.num_classes])
-            R[y,:] = 1
-            R[:,y] = -1
-            
-            # binary_labels[i] is a 1D vector consisting of the binary classification labels 
-            # (i.e. the entries below the main diagonal of R)
-            binary_labels[y, :] = R[r, c]
-
-        self.binary_labels = torch.from_numpy(binary_labels).cuda()
-        self.r, self.c = r, c
-        
-    def init(self, T, p_cutoff, hard_label=True, dist_align=True, ema_p=0.999):
-        self.T = T
+    def init(self, T, p_cutoff, proj_size, K, smoothing_alpha, da_len=0):
+        self.T = T 
         self.p_cutoff = p_cutoff
-        self.use_hard_label = hard_label
-        self.dist_align = dist_align
-        self.ema_p = ema_p
-        self.lb_prob_t = torch.ones((self.args.num_classes)).cuda(self.args.gpu) / self.args.num_classes
-        self.ulb_prob_t = torch.ones((self.args.num_classes)).cuda(self.args.gpu) / self.args.num_classes
-    
-    @torch.no_grad()
-    def update_prob_t(self, lb_probs, ulb_probs):
-        if self.args.distributed and self.args.world_size > 1:
-            lb_probs = self.concat_all_gather(lb_probs)
-            ulb_probs = self.concat_all_gather(ulb_probs)
-        
-        ulb_prob_t = ulb_probs.mean(0)
-        self.ulb_prob_t = self.ema_p * self.ulb_prob_t + (1 - self.ema_p) * ulb_prob_t
+        self.proj_size = proj_size 
+        self.K = K
+        self.smoothing_alpha = smoothing_alpha
+        self.da_len = da_len
 
-        lb_prob_t = lb_probs.mean(0)
-        self.lb_prob_t = self.ema_p * self.lb_prob_t + (1 - self.ema_p) * lb_prob_t
+        # TODO：move this part into a hook
+        # memeory bank
+        self.mem_bank = torch.randn(proj_size, K).cuda(self.gpu)
+        self.mem_bank = F.normalize(self.mem_bank, dim=0)
+        self.labels_bank = torch.zeros(K, dtype=torch.long).cuda(self.gpu)
+
+    def set_hooks(self):
+        self.register_hook(
+            DistAlignQueueHook(num_classes=self.num_classes, queue_length=self.args.da_len, p_target_type='uniform'), 
+            "DistAlignHook")
+        self.register_hook(FixedThresholdingHook(), "MaskingHook")
+        super().set_hooks()
+
+    def set_model(self): 
+        model = super().set_model()
+        model = SimMatch_Net(model, proj_size=self.args.proj_size)
+        return model
+    
+    def set_ema_model(self):
+        ema_model = self.net_builder(num_classes=self.num_classes)
+        ema_model = SimMatch_Net(ema_model, proj_size=self.args.proj_size)
+        ema_model.load_state_dict(self.model.state_dict())
+        return ema_model    
+
 
     @torch.no_grad()
-    def distribution_alignment(self, probs):
-        # da
-        probs = probs * (1e-6 + self.lb_prob_t) / (1e-6 + self.ulb_prob_t)
-        probs = probs / probs.sum(dim=1, keepdim=True)
-        return probs.detach()
+    def update_bank(self, k, labels, index):
+        if self.distributed and self.world_size > 1:
+            k = concat_all_gather(k)
+            labels = concat_all_gather(labels)
+            index = concat_all_gather(index)
+        if self.use_ema_teacher:
+            self.mem_bank[:, index] = k.t().detach()
+        else:
+            self.mem_bank[:, index] = F.normalize(self.ema_bank * self.mem_bank[:, index] + (1 - self.ema_bank) * k.t().detach())
+        self.labels_bank[index] = labels.detach()
     
-    def train_step(self, x_lb_w, x_lb_s, y_lb, x_ulb_w, x_ulb_s):
+    def train_step(self, idx_lb, x_lb, y_lb, x_ulb_w, x_ulb_s):
         num_lb = y_lb.shape[0]
+        num_ulb = len(x_ulb_w['input_ids']) if isinstance(x_ulb_w, dict) else x_ulb_w.shape[0]
+        idx_lb = idx_lb.cuda(self.gpu)
 
         # inference and calculate sup/unsup losses
         with self.amp_cm():
+            bank = self.mem_bank.clone().detach()
+
             if self.use_cat:
-                inputs = torch.cat((x_lb_w, x_lb_s, x_ulb_w, x_ulb_s))
-                logits, feats = self.model(inputs)
-                logits_x_lb_w, logits_x_lb_s, logits_x_ulb_w, logits_x_ulb_s = logits.chunk(4)
-                _, _, features_x_ulb_w, features_x_ulb_s = feats.chunk(4)
+                # inputs = torch.cat((x_lb, x_ulb_s))
+                # logits, feats = self.model(inputs)
+                # logits_x_lb, ema_feats_x_lb = logits[:num_lb], feats[:num_lb]
+                # logits_x_ulb_s, feats_x_ulb_s = logits[num_lb:], feats[num_lb:]
+                inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
+                outputs = self.model(inputs)
+                logits, feats = outputs['logits'], outputs['feat']
+                # logits, feats = self.model(inputs)
+                logits_x_lb, ema_feats_x_lb = logits[:num_lb], feats[:num_lb]
+                ema_logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
+                ema_feats_x_ulb_w, feats_x_ulb_s = feats[num_lb:].chunk(2)
             else:
-                logits_x_lb_w, _ = self.model(x_lb_w)
-                logits_x_lb_s, _ = self.model(x_lb_s)
-                logits_x_ulb_s, features_x_ulb_s = self.model(x_ulb_s)
-                with torch.no_grad():
-                    logits_x_ulb_w, features_x_ulb_w = self.model(x_ulb_w)
+                outs_x_lb = self.model(x_lb)
+                logits_x_lb, ema_feats_x_lb  = outs_x_lb['logits'], outs_x_lb['feat']
+                # logits_x_lb, ema_feats_x_lb = self.model(x_lb)
 
-            sup_loss = ce_loss(logits_x_lb_w, y_lb, reduction='mean') + ce_loss(logits_x_lb_s, y_lb, reduction='mean')
-            probs_x_lb_w = torch.softmax(logits_x_lb_w.detach(), dim=-1)
-            probs_x_lb_s = torch.softmax(logits_x_lb_s.detach(), dim=-1)
-            max_probs_lb_w, _ = probs_x_lb_w.max(dim=-1)
-            max_probs_lb_s, _ = probs_x_lb_s.max(dim=-1)
-            max_probs_x_ulb_w = torch.softmax(logits_x_ulb_w.detach(), dim=-1)
-            max_probs_x_ulb_s = torch.softmax(logits_x_ulb_s.detach(), dim=-1)
+                outs_x_ulb_w = self.model(x_ulb_w)
+                ema_logits_x_ulb_w, ema_feats_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
+                # ema_logits_x_ulb_w, ema_feats_x_ulb_w = self.model(x_ulb_w)
 
-            # update 
-            self.update_prob_t(max_probs_lb_w, max_probs_x_ulb_w)
-            self.update_prob_t(max_probs_lb_s, max_probs_x_ulb_s)
+                outs_x_ulb_s = self.model(x_ulb_s)
+                logits_x_ulb_s, feats_x_ulb_s = outs_x_ulb_s['logits'], outs_x_ulb_s['feat']
+                # logits_x_ulb_s, feats_x_ulb_s = self.model(x_ulb_s)
 
-            # distribution alignment
-            if self.dist_align:
-                max_probs_x_ulb_w = self.distribution_alignment(max_probs_x_ulb_w)
-                max_probs_x_ulb_s = self.distribution_alignment(max_probs_x_ulb_s)
+            sup_loss = ce_loss(logits_x_lb, y_lb, reduction='mean')
+
+            self.ema.apply_shadow()
+            with torch.no_grad():
+                # ema teacher model
+                if self.use_ema_teacher:
+                    ema_feats_x_lb = self.model(x_lb)['feat']
+                ema_probs_x_ulb_w = F.softmax(ema_logits_x_ulb_w, dim=-1)
+                ema_probs_x_ulb_w = self.call_hook("dist_align", "DistAlignHook", probs_x_ulb=ema_probs_x_ulb_w.detach())
+            self.ema.restore()
+
+            with torch.no_grad():
+                teacher_logits = ema_feats_x_ulb_w @ bank
+                teacher_prob_orig = F.softmax(teacher_logits / self.T, dim=1)
+                factor = ema_probs_x_ulb_w.gather(1, self.labels_bank.expand([num_ulb, -1]))
+                teacher_prob = teacher_prob_orig * factor
+                teacher_prob /= torch.sum(teacher_prob, dim=1, keepdim=True)
+
+                if self.smoothing_alpha < 1:
+                    bs = teacher_prob_orig.size(0)
+                    aggregated_prob = torch.zeros([bs, self.num_classes], device=teacher_prob_orig.device)
+                    aggregated_prob = aggregated_prob.scatter_add(1, self.labels_bank.expand([bs,-1]) , teacher_prob_orig)
+                    probs_x_ulb_w = ema_probs_x_ulb_w * self.smoothing_alpha + aggregated_prob * (1- self.smoothing_alpha)
+                else:
+                    probs_x_ulb_w = ema_probs_x_ulb_w
+
+            student_logits = feats_x_ulb_s @ bank
+            student_prob = F.softmax(student_logits / self.T, dim=1)
+            in_loss = torch.sum(-teacher_prob.detach() * torch.log(student_prob), dim=1).mean()
+            if self.epoch == 0:
+                in_loss *= 0.0
+                probs_x_ulb_w = ema_probs_x_ulb_w
 
             # compute mask
-            with torch.no_grad():
-                max_probs = torch.max(max_probs_x_ulb_w, dim=-1)[0]
-                p_cutoff_w = max_probs_lb_w.mean() * self.p_cutoff
-                p_cutoff_s = max_probs_lb_s.mean() * self.p_cutoff
-                mask = torch.logical_and(max_probs.ge(p_cutoff_w), max_probs.ge(p_cutoff_s)).to(max_probs.dtype)
-            
-            unsup_loss, pseudo_label = consistency_loss(max_probs_x_ulb_s,
-                                             max_probs_x_ulb_w,
-                                             'ce',
-                                             use_hard_labels=self.use_hard_label,
-                                             T=self.T,
-                                             mask=mask)
-            
-            features_ulb = torch.cat([features_x_ulb_w.unsqueeze(1), features_x_ulb_s.unsqueeze(1)], dim=1)
-            contrastive_loss = (self.contrastive_criterion(features_ulb, max_probs, pseudo_label, reduction='none') * mask).mean() + \
-                (self.contrastive_criterion(features_ulb, pseudo_label, reduction='none') * (1.-mask)).mean()
-                
-            # pairwise cross-entropy loss
-            binary_labels = self.binary_labels[y_lb]
-            idx_1v1 = (binary_labels != 0)
-            idx_be = (binary_labels == 0)
-            
-            pairwise_logits_x_lb_w = (logits_x_lb_w[:, self.r] - logits_x_lb_w[:, self.c])
-            pairwise_logits_x_lb_s = (logits_x_lb_s[:, self.r] - logits_x_lb_s[:, self.c])
-            
-            binary_targets = (binary_labels + 1)/2
+            mask = self.call_hook("masking", "MaskingHook", logits_x_ulb=probs_x_ulb_w, softmax_x_ulb=False)
 
-            temp_w = F.binary_cross_entropy_with_logits(pairwise_logits_x_lb_w, binary_targets, reduction='none')
-            # temp = BCEWithLogitsLoss(pairwise_logits, binary_targets)
-            L_1v1_w = temp_w[idx_1v1].mean()
-            L_be_w = temp_w[idx_be].mean()
-            
-            temp_s = F.binary_cross_entropy_with_logits(pairwise_logits_x_lb_s, binary_targets, reduction='none')
-            # temp = BCEWithLogitsLoss(pairwise_logits, binary_targets)
-            L_1v1_s = temp_s[idx_1v1].mean()
-            L_be_s = temp_s[idx_be].mean()
-            
-            total_loss = sup_loss + self.lambda_u * unsup_loss + contrastive_loss + L_1v1_w + L_1v1_s + L_be_w + L_be_s
+            unsup_loss = consistency_loss(logits_x_ulb_s,
+                                          probs_x_ulb_w,
+                                          'ce',
+                                          mask=mask)
 
-        self.parameter_update(total_loss)
+            total_loss = sup_loss + self.lambda_u * unsup_loss + self.lambda_in * in_loss
+
+            self.update_bank(ema_feats_x_lb, y_lb, idx_lb)
+
+        # parameter updates
+        self.call_hook("param_update", "ParamUpdateHook", loss=total_loss)
 
         tb_dict = {}
         tb_dict['train/sup_loss'] = sup_loss.item()
         tb_dict['train/unsup_loss'] = unsup_loss.item()
-        tb_dict['train/contrastive_loss'] = contrastive_loss.item()
         tb_dict['train/total_loss'] = total_loss.item()
-        tb_dict['train/mask_ratio'] = 1.0 - mask.float().mean().item()
+        tb_dict['train/mask_ratio'] = mask.float().mean().item()
         return tb_dict
-
+    
     def get_save_dict(self):
         save_dict = super().get_save_dict()
-        # additional saving arguments
-        save_dict['ulb_prob_t'] = self.ulb_prob_t.cpu()
-        save_dict['lb_prob_t'] = self.lb_prob_t.cpu()
+        save_dict['mem_bank'] = self.mem_bank.cpu()
+        save_dict['labels_bank'] = self.labels_bank.cpu()
+        save_dict['p_model'] = self.hooks_dict['DistAlignHook'].p_model.cpu() 
+        save_dict['p_model_ptr'] = self.hooks_dict['DistAlignHook'].p_model_ptr.cpu()
         return save_dict
-
-
+    
     def load_model(self, load_path):
         checkpoint = super().load_model(load_path)
-        self.ulb_prob_t = checkpoint['ulb_prob_t'].cuda(self.args.gpu)
-        self.lb_prob_t = checkpoint['lb_prob_t'].cuda(self.args.gpu)
-        self.print_fn("additional parameter loaded")
+        self.mem_bank = checkpoint['mem_bank'].cuda(self.gpu)
+        self.labels_bank = checkpoint['labels_bank'].cuda(self.gpu)
+        self.hooks_dict['DistAlignHook'].p_model = checkpoint['p_model'].cuda(self.args.gpu)
+        self.hooks_dict['DistAlignHook'].p_model_ptr = checkpoint['p_model_ptr'].cuda(self.args.gpu)
         return checkpoint
-
-    @torch.no_grad()
-    def concat_all_gather(self, tensor):
-        """
-        Performs all_gather operation on the provided tensors.
-        *** Warning ***: torch.distributed.all_gather has no gradient.
-        """
-        tensors_gather = [torch.ones_like(tensor)
-            for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(tensors_gather, tensor)
-
-        output = torch.cat(tensors_gather, dim=0)
-        return output
 
     @staticmethod
     def get_argument():
         return [
-            SSL_Argument('--hard_label', str2bool, True),
             SSL_Argument('--T', float, 0.5),
             SSL_Argument('--p_cutoff', float, 0.95),
+            SSL_Argument('--proj_size', int, 128),
+            SSL_Argument('--K', int, 128),
+            SSL_Argument('--in_loss_ratio', float, 1.0),
+            SSL_Argument('--smoothing_alpha', float, 0.9),
+            SSL_Argument('--da_len', int, 256),
         ]

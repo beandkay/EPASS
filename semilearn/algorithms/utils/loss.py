@@ -41,7 +41,7 @@ def ce_loss(logits, targets, reduction='none'):
         return F.nll_loss(log_pred, targets, reduction=reduction)
 
 
-def consistency_loss(logits, targets, name='ce', mask=None):
+def consistency_loss(logits, targets, name='ce', mask=None, refixmatch=False):
     """
     wrapper for consistency regularization loss in semi-supervised learning.
 
@@ -63,5 +63,9 @@ def consistency_loss(logits, targets, name='ce', mask=None):
     if mask is not None:
         # mask must not be boolean type
         loss = loss * mask
+        if refixmatch:
+            kld = F.kl_div(F.softmax(logits, dim=-1).log(), F.softmax(targets / 0.5, dim=-1).detach(), reduction='none').sum(dim=1, keepdim=False)
+            kld = torch.mean(kld * (1.0 - mask))
+            loss = loss + kld
 
     return loss.mean()
