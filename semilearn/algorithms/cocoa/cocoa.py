@@ -206,6 +206,8 @@ class COCOA(AlgorithmBase):
                 logits_x_lb_w, logits_x_lb_s = logits[:num_lb*2].chunk(2)
                 logits_x_ulb_w, logits_x_ulb_s = logits[num_lb*2:].chunk(2)
                 features_x_ulb_w, features_x_ulb_s = feats[num_lb*2:].chunk(2)
+
+                del logits, feats
             else:
                 outs_x_lb_w = self.model(x_lb_w)
                 logits_x_lb_w, _  = outs_x_lb_w['logits'], outs_x_lb_w['feat']
@@ -221,7 +223,6 @@ class COCOA(AlgorithmBase):
             probs_x_lb_w = torch.softmax(logits_x_lb_w.detach(), dim=-1)
             probs_x_lb_s = torch.softmax(logits_x_lb_s.detach(), dim=-1)
             probs_x_ulb_w = torch.softmax(logits_x_ulb_w.detach(), dim=-1)
-
             # distribution alignment 
             probs_x_ulb_w = self.call_hook("dist_align", "DistAlignHook", probs_x_ulb=probs_x_ulb_w, probs_x_lb=probs_x_lb_w)
 

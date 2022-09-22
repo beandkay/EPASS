@@ -27,9 +27,9 @@ optim: SGD
 lr: 0.03
 momentum: 0.9
 weight_decay: 0.001
-amp: True
+amp: False
 clip: 0.0
-use_cat: True
+use_cat: False
 net: wrn_28_8
 net_from_name: False
 data_dir: ./data
