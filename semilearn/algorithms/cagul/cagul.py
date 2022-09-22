@@ -203,8 +203,9 @@ class CAGUL(AlgorithmBase):
                 inputs = torch.cat((x_lb_w, x_lb_s, x_ulb_w, x_ulb_s))
                 outputs = self.model(inputs)
                 logits, feats = outputs['logits'], outputs['feat']
-                logits_x_lb_w, logits_x_lb_s, logits_x_ulb_w, logits_x_ulb_s = logits.chunk(4)
-                _, _, features_x_ulb_w, features_x_ulb_s = feats.chunk(4)
+                logits_x_lb_w, logits_x_lb_s = logits[:num_lb*2].chunk(2)
+                logits_x_ulb_w, logits_x_ulb_s = logits[num_lb*2:].chunk(2)
+                features_x_ulb_w, features_x_ulb_s = feats[num_lb*2:].chunk(2)
             else:
                 outs_x_lb_w = self.model(x_lb_w)
                 logits_x_lb_w, _  = outs_x_lb_w['logits'], outs_x_lb_w['feat']
