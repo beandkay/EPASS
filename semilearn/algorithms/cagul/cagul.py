@@ -135,7 +135,8 @@ class CAGUL_Net(nn.Module):
         feat = self.backbone(x, only_feat=True)
         logits = self.backbone(feat, only_fc=True)
         feat_proj = self.l2norm(self.mlp_proj(feat))
-        return logits, feat_proj 
+        result_dict = {'logits':logits, 'feat':feat_proj}
+        return result_dict
 
 class CAGUL(AlgorithmBase):
     """
