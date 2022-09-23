@@ -64,7 +64,7 @@ class SequenceMatch(AlgorithmBase):
                 inputs = torch.cat((x_lb, x_ulb_w, x_ulb_m, x_ulb_s))
                 outputs = self.model(inputs)
                 logits_x_lb = outputs['logits'][:num_lb]
-                logits_x_ulb_w, logits_x_ulb_s = outputs['logits'][num_lb:].chunk(2)
+                logits_x_ulb_w, logits_x_ulb_m, logits_x_ulb_s = outputs['logits'][num_lb:].chunk(3)
             else:
                 outs_x_lb = self.model(x_lb) 
                 logits_x_lb = outs_x_lb['logits']
