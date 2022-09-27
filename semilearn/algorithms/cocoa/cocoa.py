@@ -21,7 +21,7 @@ class SoftSupConLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
-    def forward(self, features, max_probs, labels=None, mask=None, reduction="mean", select_matrix=None):
+    def forward(self, features, max_probs=None, labels=None, mask=None, reduction="mean", select_matrix=None):
         """Compute loss for model. If both `labels` and `mask` are None,
         it degenerates to SimCLR unsupervised loss:
         https://arxiv.org/pdf/2002.05709.pdf
@@ -173,6 +173,7 @@ class COCOA(AlgorithmBase):
         self.use_hard_label = hard_label
         self.dist_align = dist_align
         self.ema_p = ema_p
+        print(self.use_amp)
 
     def set_hooks(self):
         self.register_hook(PseudoLabelingHook(), "PseudoLabelingHook")
@@ -203,10 +204,10 @@ class COCOA(AlgorithmBase):
                 inputs = torch.cat((x_lb_w, x_lb_s, x_ulb_w, x_ulb_s))
                 outputs = self.model(inputs)
                 logits, feats = outputs['logits'], outputs['feat']
+                del inputs, outputs
                 logits_x_lb_w, logits_x_lb_s = logits[:num_lb*2].chunk(2)
                 logits_x_ulb_w, logits_x_ulb_s = logits[num_lb*2:].chunk(2)
                 features_x_ulb_w, features_x_ulb_s = feats[num_lb*2:].chunk(2)
-
                 del logits, feats
             else:
                 outs_x_lb_w = self.model(x_lb_w)
@@ -215,9 +216,9 @@ class COCOA(AlgorithmBase):
                 logits_x_lb_s, _  = outs_x_lb_s['logits'], outs_x_lb_s['feat']
                 outs_x_ulb_s = self.model(x_ulb_s)
                 logits_x_ulb_s, features_x_ulb_s = outs_x_ulb_s['logits'], outs_x_ulb_s['feat']                
-                with torch.no_grad():
-                    outs_x_ulb_w = self.model(x_ulb_w)
-                    logits_x_ulb_w, features_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
+                # with torch.no_grad():
+                outs_x_ulb_w = self.model(x_ulb_w)
+                logits_x_ulb_w, features_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
 
             sup_loss = ce_loss(logits_x_lb_w, y_lb, reduction='mean') + ce_loss(logits_x_lb_s, y_lb, reduction='mean')
             probs_x_lb_w = torch.softmax(logits_x_lb_w.detach(), dim=-1)
@@ -247,7 +248,7 @@ class COCOA(AlgorithmBase):
                 
             features_ulb = torch.cat([features_x_ulb_w.unsqueeze(1), features_x_ulb_s.unsqueeze(1)], dim=1)
             contrastive_loss = self.contrastive_criterion(features_ulb, max_probs, pseudo_label) + \
-                self.contrastive_criterion(features_ulb, pseudo_label)
+                self.contrastive_criterion(features_ulb)
             
             total_loss = sup_loss + self.lambda_u * unsup_loss + contrastive_loss
             

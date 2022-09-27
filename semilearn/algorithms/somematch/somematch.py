@@ -1,13 +1,17 @@
+
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+
+import torch
+
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from semilearn.core import AlgorithmBase
-from semilearn.algorithms.hooks import DistAlignQueueHook, FixedThresholdingHook
+from semilearn.algorithms.hooks import DistAlignQueueHook, FixedThresholdingHook, PseudoLabelingHook
 from semilearn.algorithms.utils import ce_loss, consistency_loss, SSL_Argument, concat_all_gather
-
+import torch.nn.functional as F
 
 class SomeMatch_Net(nn.Module):
     def __init__(self, base, proj_size=128):
@@ -38,37 +42,34 @@ class SomeMatch_Net(nn.Module):
 
 class SomeMatch(AlgorithmBase):
     """
-    SomeMatch algorithm (https://arxiv.org/abs/2203.06915).
-    Reference implementation (https://github.com/KyleZheng1997/simmatch).
+        SomeMatch algorithm (https://arxiv.org/abs/2110.08263).
 
-    Args:
-        - args (`argparse`):
-            algorithm arguments
-        - net_builder (`callable`):
-            network loading function
-        - tb_log (`TBLog`):
-            tensorboard logger
-        - logger (`logging.Logger`):
-            logger to use
-        - T (`float`):
-            Temperature for pseudo-label sharpening
-        - p_cutoff(`float`):
-            Confidence threshold for generating pseudo-labels
-        - hard_label (`bool`, *optional*, default to `False`):
-            If True, targets have [Batch size] shape with int values. If False, the target is vector
-        - K (`int`, *optional*, default to 128):
-            Length of the memory bank to store class probabilities and embeddings of the past weakly augmented samples
-        - smoothing_alpha (`float`, *optional*, default to 0.999):
-            Weight for a smoothness constraint which encourages taking a similar value as its nearby samples’ class probabilities
-        - da_len (`int`, *optional*, default to 256):
-            Length of the memory bank for distribution alignment.
-        - in_loss_ratio (`float`, *optional*, default to 1.0):
-            Loss weight for simmatch feature loss
-    """
+        Args:
+            - args (`argparse`):
+                algorithm arguments
+            - net_builder (`callable`):
+                network loading function
+            - tb_log (`TBLog`):
+                tensorboard logger
+            - logger (`logging.Logger`):
+                logger to use
+            - T (`float`):
+                Temperature for pseudo-label sharpening
+            - p_cutoff(`float`):
+                Confidence threshold for generating pseudo-labels
+            - hard_label (`bool`, *optional*, default to `False`):
+                If True, targets have [Batch size] shape with int values. If False, the target is vector
+            - ulb_dest_len (`int`):
+                Length of unlabeled data
+            - thresh_warmup (`bool`, *optional*, default to `True`):
+                If True, warmup the confidence threshold, so that at the beginning of the training, all estimated
+                learning effects gradually rise from 0 until the number of unused unlabeled data is no longer
+                predominant
+
+        """
     def __init__(self, args, net_builder, tb_log=None, logger=None):
         super().__init__(args, net_builder, tb_log, logger) 
-        # simmatch specificed arguments
-        # adjust k 
+        # flexmatch specificed arguments
         self.use_ema_teacher = True
         if args.dataset in ['cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
             self.use_ema_teacher = False
@@ -77,7 +78,6 @@ class SomeMatch(AlgorithmBase):
         self.lambda_in = args.in_loss_ratio
         self.init(T=args.T, p_cutoff=args.p_cutoff, proj_size=args.proj_size, K=args.K, smoothing_alpha=args.smoothing_alpha, da_len=args.da_len)
     
-
     def init(self, T, p_cutoff, proj_size, K, smoothing_alpha, da_len=0):
         self.T = T 
         self.p_cutoff = p_cutoff
@@ -97,16 +97,17 @@ class SomeMatch(AlgorithmBase):
             DistAlignQueueHook(num_classes=self.num_classes, queue_length=self.args.da_len, p_target_type='uniform'), 
             "DistAlignHook")
         self.register_hook(FixedThresholdingHook(), "MaskingHook")
+        self.register_hook(PseudoLabelingHook(), "PseudoLabelingHook")
         super().set_hooks()
 
     def set_model(self): 
         model = super().set_model()
-        model = SimMatch_Net(model, proj_size=self.args.proj_size)
+        model = SomeMatch_Net(model, proj_size=self.args.proj_size)
         return model
     
     def set_ema_model(self):
         ema_model = self.net_builder(num_classes=self.num_classes)
-        ema_model = SimMatch_Net(ema_model, proj_size=self.args.proj_size)
+        ema_model = SomeMatch_Net(ema_model, proj_size=self.args.proj_size)
         ema_model.load_state_dict(self.model.state_dict())
         return ema_model    
 
@@ -123,7 +124,8 @@ class SomeMatch(AlgorithmBase):
             self.mem_bank[:, index] = F.normalize(self.ema_bank * self.mem_bank[:, index] + (1 - self.ema_bank) * k.t().detach())
         self.labels_bank[index] = labels.detach()
     
-    def train_step(self, idx_lb, x_lb, y_lb, x_ulb_w, x_ulb_s):
+
+    def train_step(self, x_lb, y_lb, idx_ulb, x_ulb_w, x_ulb_m, x_ulb_s):
         num_lb = y_lb.shape[0]
         num_ulb = len(x_ulb_w['input_ids']) if isinstance(x_ulb_w, dict) else x_ulb_w.shape[0]
         idx_lb = idx_lb.cuda(self.gpu)
@@ -131,32 +133,27 @@ class SomeMatch(AlgorithmBase):
         # inference and calculate sup/unsup losses
         with self.amp_cm():
             bank = self.mem_bank.clone().detach()
-
             if self.use_cat:
-                # inputs = torch.cat((x_lb, x_ulb_s))
-                # logits, feats = self.model(inputs)
-                # logits_x_lb, ema_feats_x_lb = logits[:num_lb], feats[:num_lb]
-                # logits_x_ulb_s, feats_x_ulb_s = logits[num_lb:], feats[num_lb:]
-                inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
+                inputs = torch.cat((x_lb, x_ulb_w, x_ulb_m, x_ulb_s))
                 outputs = self.model(inputs)
                 logits, feats = outputs['logits'], outputs['feat']
                 # logits, feats = self.model(inputs)
                 logits_x_lb, ema_feats_x_lb = logits[:num_lb], feats[:num_lb]
-                ema_logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
-                ema_feats_x_ulb_w, feats_x_ulb_s = feats[num_lb:].chunk(2)
+                ema_logits_x_ulb_w, logits_x_ulb_m, logits_x_ulb_s = logits[num_lb:].chunk(3)
+                ema_feats_x_ulb_w, feats_x_ulb_m, feats_x_ulb_s = feats[num_lb:].chunk(3)
             else:
                 outs_x_lb = self.model(x_lb)
                 logits_x_lb, ema_feats_x_lb  = outs_x_lb['logits'], outs_x_lb['feat']
-                # logits_x_lb, ema_feats_x_lb = self.model(x_lb)
 
                 outs_x_ulb_w = self.model(x_ulb_w)
                 ema_logits_x_ulb_w, ema_feats_x_ulb_w = outs_x_ulb_w['logits'], outs_x_ulb_w['feat']
-                # ema_logits_x_ulb_w, ema_feats_x_ulb_w = self.model(x_ulb_w)
 
+                outs_x_ulb_m = self.model(x_ulb_m)
+                logits_x_ulb_m, feats_x_ulb_m = outs_x_ulb_m['logits'], outs_x_ulb_m['feat']
+                
                 outs_x_ulb_s = self.model(x_ulb_s)
                 logits_x_ulb_s, feats_x_ulb_s = outs_x_ulb_s['logits'], outs_x_ulb_s['feat']
-                # logits_x_ulb_s, feats_x_ulb_s = self.model(x_ulb_s)
-
+                
             sup_loss = ce_loss(logits_x_lb, y_lb, reduction='mean')
 
             self.ema.apply_shadow()
@@ -167,7 +164,7 @@ class SomeMatch(AlgorithmBase):
                 ema_probs_x_ulb_w = F.softmax(ema_logits_x_ulb_w, dim=-1)
                 ema_probs_x_ulb_w = self.call_hook("dist_align", "DistAlignHook", probs_x_ulb=ema_probs_x_ulb_w.detach())
             self.ema.restore()
-
+            
             with torch.no_grad():
                 teacher_logits = ema_feats_x_ulb_w @ bank
                 teacher_prob_orig = F.softmax(teacher_logits / self.T, dim=1)
@@ -198,8 +195,23 @@ class SomeMatch(AlgorithmBase):
                                           'ce',
                                           mask=mask)
 
+            # unsup_loss_mw = F.kl_div(F.softmax(logits_x_ulb_m, dim=-1).log(),
+            #                       F.softmax(probs_x_ulb_w / self.T, dim=-1).detach(),
+            #                       reduction='none').sum(dim=1, keepdim=False)
+            # unsup_loss_mw = (unsup_loss_mw * mask).mean()
+            
+            # unsup_loss_sm = F.kl_div(F.softmax(logits_x_ulb_s, dim=-1).log(),
+            #                       F.softmax(logits_x_ulb_m / self.T, dim=-1).detach(),
+            #                       reduction='none').sum(dim=1, keepdim=False)
+            # unsup_loss_sm = (unsup_loss_sm * mask).mean()
+            
+            # unsup_loss_sw = F.kl_div(F.softmax(logits_x_ulb_s, dim=-1).log(),
+            #                       F.softmax(probs_x_ulb_w / self.T, dim=-1).detach(),
+            #                       reduction='none').sum(dim=1, keepdim=False)
+            # unsup_loss_sw = (unsup_loss_sw * mask).mean()
+            
             total_loss = sup_loss + self.lambda_u * unsup_loss + self.lambda_in * in_loss
-
+            
             self.update_bank(ema_feats_x_lb, y_lb, idx_lb)
 
         # parameter updates
