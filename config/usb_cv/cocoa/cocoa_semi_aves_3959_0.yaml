@@ -29,7 +29,7 @@ lr: 0.001
 layer_decay: 0.65
 momentum: 0.9
 weight_decay: 0.0005
-amp: True
+use_amp: True
 clip: 0.0
 use_cat: True
 net: vit_small_patch16_224
