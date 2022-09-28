@@ -173,7 +173,6 @@ class COCOA(AlgorithmBase):
         self.use_hard_label = hard_label
         self.dist_align = dist_align
         self.ema_p = ema_p
-        print(self.use_amp)
 
     def set_hooks(self):
         self.register_hook(PseudoLabelingHook(), "PseudoLabelingHook")
