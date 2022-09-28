@@ -90,7 +90,7 @@ def make_dataset(dataset_root, split, task='All', pl_list=None):
         if task == 'semi_fungi':
             img[idx][0] = os.path.join(dataset_root, x[0] + '.JPG')
         else:
-            img[idx][0] = os.path.join(dataset_root, x[0])
+            img[idx][0] = os.path.join(dataset_root, task, x[0])
         img[idx][1] = int(x[1])
 
     classes = [x[1] for x in img]
