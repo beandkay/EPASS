@@ -78,7 +78,7 @@ def get_dataset(args, algorithm, dataset, num_labels, num_classes, data_dir='./d
     elif dataset in ["tissuemnist"]:
         lb_dset, ulb_dset, eval_dset = get_medmnist(args, algorithm, dataset, num_labels, num_classes, data_dir=data_dir,  include_lb_to_ulb=include_lb_to_ulb)
         test_dset = None
-    elif dataset == "semi_aves":
+    elif dataset in ["semi_aves", "semi_inat"]:
         lb_dset, ulb_dset, eval_dset = get_semi_aves(args, algorithm, dataset, train_split='l_train_val', data_dir=data_dir)
         test_dset = None
     elif dataset == "semi_aves_out":
