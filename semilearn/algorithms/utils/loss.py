@@ -1,9 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-
-import torch 
-import torch.nn as nn 
+import torch
+import torch.nn as nn
 from torch.nn import functional as F
 
 
@@ -41,7 +40,7 @@ def ce_loss(logits, targets, reduction='none'):
         return F.nll_loss(log_pred, targets, reduction=reduction)
 
 
-def consistency_loss(logits, targets, name='ce', mask=None, refixmatch=False):
+def consistency_loss(logits, targets, name='ce', mask=None):
     """
     wrapper for consistency regularization loss in semi-supervised learning.
 
@@ -52,20 +51,19 @@ def consistency_loss(logits, targets, name='ce', mask=None, refixmatch=False):
         mask: masks to mask-out samples when calculating the loss, usually being used as confidence-masking-out
     """
 
-    assert name in ['ce', 'mse']
+    assert name in ['ce', 'mse', 'kl']
     # logits_w = logits_w.detach()
     if name == 'mse':
         probs = torch.softmax(logits, dim=-1)
         loss = F.mse_loss(probs, targets, reduction='none').mean(dim=1)
+    elif name == 'kl':
+        loss = F.kl_div(F.log_softmax(logits / 0.5, dim=-1), F.softmax(targets / 0.5, dim=-1), reduction='none')
+        loss = torch.sum(loss * (1.0 - mask).unsqueeze(dim=-1).repeat(1, torch.softmax(logits, dim=-1).shape[1]), dim=1)
     else:
         loss = ce_loss(logits, targets, reduction='none')
 
-    if mask is not None:
+    if mask is not None and name != 'kl':
         # mask must not be boolean type
         loss = loss * mask
-        if refixmatch:
-            kld = F.kl_div(F.softmax(logits, dim=-1).log(), F.softmax(targets / 0.5, dim=-1).detach(), reduction='none').sum(dim=1, keepdim=False)
-            kld = torch.mean(kld * (1.0 - mask))
-            loss = loss + kld
 
     return loss.mean()

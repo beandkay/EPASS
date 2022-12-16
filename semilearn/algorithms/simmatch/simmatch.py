@@ -10,10 +10,11 @@ from semilearn.algorithms.utils import ce_loss, consistency_loss, SSL_Argument, 
 
 
 class SimMatch_Net(nn.Module):
-    def __init__(self, base, proj_size=128):
+    def __init__(self, base, proj_size=128, epass=False):
         super(SimMatch_Net, self).__init__()
         self.backbone = base
         self.feat_planes = base.num_features
+        self.epass = epass
         
         self.mlp_proj = nn.Sequential(*[
             nn.Linear(self.feat_planes, self.feat_planes),
@@ -21,17 +22,18 @@ class SimMatch_Net(nn.Module):
             nn.Linear(self.feat_planes, proj_size)
         ])
         
-        self.mlp_proj_2 = nn.Sequential(*[
-            nn.Linear(self.feat_planes, self.feat_planes),
-            nn.ReLU(inplace=False),
-            nn.Linear(self.feat_planes, proj_size)
-        ])
-        
-        self.mlp_proj_3 = nn.Sequential(*[
-            nn.Linear(self.feat_planes, self.feat_planes),
-            nn.ReLU(inplace=False),
-            nn.Linear(self.feat_planes, proj_size)
-        ])
+        if self.epass:
+            self.mlp_proj_2 = nn.Sequential(*[
+                nn.Linear(self.feat_planes, self.feat_planes),
+                nn.ReLU(inplace=False),
+                nn.Linear(self.feat_planes, proj_size)
+            ])
+            
+            self.mlp_proj_3 = nn.Sequential(*[
+                nn.Linear(self.feat_planes, self.feat_planes),
+                nn.ReLU(inplace=False),
+                nn.Linear(self.feat_planes, proj_size)
+            ])
         
     def l2norm(self, x, power=2):
         norm = x.pow(power).sum(1, keepdim=True).pow(1. / power)
@@ -41,7 +43,10 @@ class SimMatch_Net(nn.Module):
     def forward(self, x, **kwargs):
         feat = self.backbone(x, only_feat=True)
         logits = self.backbone(feat, only_fc=True)
-        feat_proj = self.l2norm((self.mlp_proj(feat) + self.mlp_proj_2(feat) + self.mlp_proj_3(feat))/3)
+        if self.epass:
+            feat_proj = self.l2norm((self.mlp_proj(feat) + self.mlp_proj_2(feat) + self.mlp_proj_3(feat))/3)
+        else:
+            feat_proj = self.l2norm(self.mlp_proj(feat))
         return {'logits':logits, 'feat':feat_proj}
 
     def group_matcher(self, coarse=False):
@@ -113,12 +118,12 @@ class SimMatch(AlgorithmBase):
 
     def set_model(self): 
         model = super().set_model()
-        model = SimMatch_Net(model, proj_size=self.args.proj_size)
+        model = SimMatch_Net(model, proj_size=self.args.proj_size, epass=self.args.use_epass)
         return model
     
     def set_ema_model(self):
         ema_model = self.net_builder(num_classes=self.num_classes)
-        ema_model = SimMatch_Net(ema_model, proj_size=self.args.proj_size)
+        ema_model = SimMatch_Net(ema_model, proj_size=self.args.proj_size, epass=self.args.use_epass)
         ema_model.load_state_dict(self.model.state_dict())
         return ema_model    
 
