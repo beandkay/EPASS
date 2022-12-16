@@ -3,9 +3,9 @@
 
 """ Setup
 """
-from setuptools import setup, find_packages
 from codecs import open
 from os import path
+from setuptools import setup, find_packages
 
 here = path.abspath(path.dirname(__file__))
 
@@ -20,7 +20,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/microsoft/Semi-supervised-learning',
-    author='Yidong Wang*, Hao Chen*, Yue Fan*, Wang Sun, Ran Tao, Wenxin Hou, Renjie Wang, Heli Qi, Zhen Wu,' 
+    author='Yidong Wang*, Hao Chen*, Yue Fan*, Wang Sun, Ran Tao, Wenxin Hou, Renjie Wang, Heli Qi, Zhen Wu,'
            'Satoshi Nakamura, Wei Ye, Marios Savvides, Bhiksha Raj, Takahiro Shinozaki, Bernt Schiele, Jindong Wang, Xing Xie, Yue Zhang',
     author_email='yidongwang37@gmail.com, haoc3@andrew.cmu.edu, yuefan@mpi-inf.mpg.de, jindwang@microsoft.com',
 

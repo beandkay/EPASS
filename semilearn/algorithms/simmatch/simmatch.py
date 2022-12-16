@@ -21,6 +21,18 @@ class SimMatch_Net(nn.Module):
             nn.Linear(self.feat_planes, proj_size)
         ])
         
+        self.mlp_proj_2 = nn.Sequential(*[
+            nn.Linear(self.feat_planes, self.feat_planes),
+            nn.ReLU(inplace=False),
+            nn.Linear(self.feat_planes, proj_size)
+        ])
+        
+        self.mlp_proj_3 = nn.Sequential(*[
+            nn.Linear(self.feat_planes, self.feat_planes),
+            nn.ReLU(inplace=False),
+            nn.Linear(self.feat_planes, proj_size)
+        ])
+        
     def l2norm(self, x, power=2):
         norm = x.pow(power).sum(1, keepdim=True).pow(1. / power)
         out = x.div(norm)
@@ -29,7 +41,7 @@ class SimMatch_Net(nn.Module):
     def forward(self, x, **kwargs):
         feat = self.backbone(x, only_feat=True)
         logits = self.backbone(feat, only_fc=True)
-        feat_proj = self.l2norm(self.mlp_proj(feat))
+        feat_proj = self.l2norm((self.mlp_proj(feat) + self.mlp_proj_2(feat) + self.mlp_proj_3(feat))/3)
         return {'logits':logits, 'feat':feat_proj}
 
     def group_matcher(self, coarse=False):
