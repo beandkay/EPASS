@@ -87,7 +87,7 @@ class SimMatch(AlgorithmBase):
         # simmatch specificed arguments
         # adjust k 
         self.use_ema_teacher = True
-        if args.dataset in ['stl10', 'cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
+        if args.dataset in ['cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
             self.use_ema_teacher = False
             self.ema_bank = 0.7
         args.K = args.lb_dest_len
