@@ -87,7 +87,7 @@ class SimMatch(AlgorithmBase):
         # simmatch specificed arguments
         # adjust k 
         self.use_ema_teacher = True
-        if args.dataset in ['cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
+        if args.dataset in ['stl10', 'cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
             self.use_ema_teacher = False
             self.ema_bank = 0.7
         args.K = args.lb_dest_len
@@ -188,7 +188,7 @@ class SimMatch(AlgorithmBase):
             with torch.no_grad():
                 teacher_logits = ema_feats_x_ulb_w @ bank
                 teacher_prob_orig = F.softmax(teacher_logits / self.T, dim=1)
-                factor = ema_probs_x_ulb_w.gather(1, self.labels_bank.expand([num_ulb, -1]))
+                factor = ema_probs_x_ulb_w.gather(1, self.labels_bank.expand([num_ulb, -1]))    
                 teacher_prob = teacher_prob_orig * factor
                 teacher_prob /= torch.sum(teacher_prob, dim=1, keepdim=True)
 

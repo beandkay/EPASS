@@ -89,8 +89,16 @@ class FlexMatch(AlgorithmBase):
                                           pseudo_label,
                                           'ce',
                                           mask=mask)
+            
+            if self.args.use_refix:
+                unsup_loss_refix = consistency_loss(logits_x_ulb_s,
+                                            logits_x_ulb_w,
+                                            'ce',
+                                            mask=mask)
 
-            total_loss = sup_loss + self.lambda_u * unsup_loss
+                total_loss = sup_loss + self.lambda_u * (unsup_loss + unsup_loss_refix)
+            else:
+                total_loss = sup_loss + self.lambda_u * unsup_loss
 
         # parameter updates
         self.call_hook("param_update", "ParamUpdateHook", loss=total_loss)
@@ -98,6 +106,8 @@ class FlexMatch(AlgorithmBase):
         tb_dict = {}
         tb_dict['train/sup_loss'] = sup_loss.item()
         tb_dict['train/unsup_loss'] = unsup_loss.item()
+        if self.args.use_refix:
+            tb_dict['train/unsup_loss_refix'] = unsup_loss_refix.item()
         tb_dict['train/total_loss'] = total_loss.item()
         tb_dict['train/mask_ratio'] = mask.float().mean().item()
         return tb_dict
