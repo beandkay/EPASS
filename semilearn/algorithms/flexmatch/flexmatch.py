@@ -81,9 +81,9 @@ class FlexMatch(AlgorithmBase):
             
             # generate unlabeled targets using pseudo label hook
             pseudo_label = self.call_hook("gen_ulb_targets", "PseudoLabelingHook", 
-                                          logits=logits_x_ulb_w,
-                                          use_hard_label=self.use_hard_label,
-                                          T=self.T)
+                                        logits=logits_x_ulb_w,
+                                        use_hard_label=self.use_hard_label,
+                                        T=self.T)
 
             unsup_loss = consistency_loss(logits_x_ulb_s,
                                           pseudo_label,
