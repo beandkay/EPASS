@@ -16,6 +16,7 @@ class SimMatch_Net(nn.Module):
         self.feat_planes = base.num_features
         self.epass = epass
         
+        
         self.mlp_proj = nn.Sequential(*[
             nn.Linear(self.feat_planes, self.feat_planes),
             nn.ReLU(inplace=False),
@@ -48,6 +49,7 @@ class SimMatch_Net(nn.Module):
             feat_proj = self.l2norm((self.mlp_proj(feat) + self.mlp_proj_2(feat) + self.mlp_proj_3(feat))/3)
         else:
             feat_proj = self.l2norm(self.mlp_proj(feat))
+            
         return {'logits':logits, 'feat':feat_proj}
 
     def group_matcher(self, coarse=False):
@@ -88,7 +90,7 @@ class SimMatch(AlgorithmBase):
         # simmatch specificed arguments
         # adjust k 
         self.use_ema_teacher = True
-        if args.dataset in ['cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
+        if args.dataset in ['stl10', 'cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
             self.use_ema_teacher = False
             self.ema_bank = 0.7
         args.K = args.lb_dest_len

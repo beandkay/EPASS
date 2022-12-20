@@ -7,7 +7,7 @@ import torch
 from semilearn.core.algorithmbase import AlgorithmBase
 from semilearn.algorithms.hooks import PseudoLabelingHook, FixedThresholdingHook
 from semilearn.algorithms.utils import ce_loss, consistency_loss,  SSL_Argument, str2bool
-
+import torch.nn.functional as F
 
 class FixMatch(AlgorithmBase):
     """
@@ -86,8 +86,13 @@ class FixMatch(AlgorithmBase):
                                           'ce',
                                           mask=mask)
 
-            total_loss = sup_loss + self.lambda_u * unsup_loss
-
+            unsup_loss_sw = F.kl_div(F.softmax(logits_x_ulb_s, dim=-1).log(),
+                                  F.softmax(logits_x_ulb_w / 0.5, dim=-1).detach(),
+                                  reduction='none').sum(dim=1, keepdim=False)
+            unsup_loss_sw = (unsup_loss_sw * mask).mean()
+            
+            total_loss = sup_loss + self.lambda_u * unsup_loss + self.lambda_u * unsup_loss_sw
+            
         self.call_hook("param_update", "ParamUpdateHook", loss=total_loss)
 
         tb_dict = {}
