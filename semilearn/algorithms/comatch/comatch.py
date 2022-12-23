@@ -117,7 +117,7 @@ class CoMatch(AlgorithmBase):
 
         # TODO: put this part into a hook
         # memory smoothing
-        self.queue_size = int(queue_batch * (self.args.uratio + 1) * self.args.batch_size)
+        self.queue_size = int(queue_batch * (self.args.uratio + 1) * self.args.batch_size) if self.args.dataset != 'imagenet' else self.args.K
         self.queue_feats = torch.zeros(self.queue_size, self.args.proj_size).cuda(self.gpu)
         self.queue_probs = torch.zeros(self.queue_size, self.args.num_classes).cuda(self.gpu)
         self.queue_ptr = 0
