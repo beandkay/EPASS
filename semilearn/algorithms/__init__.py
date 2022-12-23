@@ -20,8 +20,6 @@ from .simmatch import SimMatch
 from .adamatch import AdaMatch
 from .refixmatch import ReFixMatch
 from .sequencematch import SequenceMatch
-from .somematch import SomeMatch
-from .cocoa import COCOA
 
 # if any new alg., please append the dict
 name2alg = {
@@ -44,8 +42,6 @@ name2alg = {
     'dash': Dash,
     # 'mpl': MPL
     'sequencematch': SequenceMatch,
-    'somematch': SomeMatch,
-    'cocoa': COCOA
 }
 
 def get_algorithm(args, net_builder, tb_log, logger):
