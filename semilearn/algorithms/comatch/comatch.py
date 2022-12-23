@@ -148,6 +148,10 @@ class CoMatch(AlgorithmBase):
             probs = concat_all_gather(probs)
         # update memory bank
         length = feats.shape[0]
+        if (self.queue_ptr + length) > self.queue_size:
+            queue_ptr = self.queue_size - self.queue_ptr
+            feats = feats[:queue_ptr]
+            probs = probs[:queue_ptr]
         self.queue_feats[self.queue_ptr:self.queue_ptr + length, :] = feats
         self.queue_probs[self.queue_ptr:self.queue_ptr + length, :] = probs      
         self.queue_ptr = (self.queue_ptr + length) % self.queue_size
