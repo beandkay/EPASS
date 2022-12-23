@@ -267,7 +267,7 @@ class AlgorithmBase:
         total_num = 0.0
         y_true = []
         y_pred = []
-        # y_probs = []
+        y_probs = []
         y_logits = []
         with torch.no_grad():
             for data in eval_loader:
@@ -289,13 +289,13 @@ class AlgorithmBase:
                 y_true.extend(y.cpu().tolist())
                 y_pred.extend(torch.max(logits, dim=-1)[1].cpu().tolist())
                 y_logits.append(logits.cpu().numpy())
-                # y_probs.append(torch.softmax(logits, dim=-1).cpu().numpy())
+                y_probs.append(torch.softmax(logits, dim=-1).cpu().numpy())
                 total_loss += loss.item() * num_batch
         y_true = np.array(y_true)
         y_pred = np.array(y_pred)
         y_logits = np.concatenate(y_logits)
         top1 = accuracy_score(y_true, y_pred)
-        top5 = top_k_accuracy_score(y_true, y_pred, k=5)
+        top5 = top_k_accuracy_score(y_true, y_probs, k=5)
         balanced_top1 = balanced_accuracy_score(y_true, y_pred)
         precision = precision_score(y_true, y_pred, average='macro')
         recall = recall_score(y_true, y_pred, average='macro')
