@@ -35,6 +35,7 @@ weight_decay: 0.0005
 amp: False
 clip: 0.0
 use_cat: True
+use_epass: False
 net: vit_base_patch16_96
 net_from_name: False
 data_dir: ./data

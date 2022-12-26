@@ -33,6 +33,7 @@ weight_decay: 0.0005
 amp: False
 clip: 0.0
 use_cat: True
+use_epass: False
 net: vit_tiny_patch2_32
 net_from_name: False
 data_dir: ./data
