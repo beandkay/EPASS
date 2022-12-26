@@ -33,7 +33,7 @@ momentum: 0.9
 weight_decay: 0.0003
 layer_decay: 1.0
 amp: False
-clip: 0.0m
+clip: 0.0
 use_cat: True
 use_epass: False
 net: resnet50
