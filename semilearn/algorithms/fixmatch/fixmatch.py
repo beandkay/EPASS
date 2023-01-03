@@ -8,6 +8,7 @@ from semilearn.core.algorithmbase import AlgorithmBase
 from semilearn.algorithms.hooks import PseudoLabelingHook, FixedThresholdingHook
 from semilearn.algorithms.utils import ce_loss, consistency_loss,  SSL_Argument, str2bool
 
+
 class FixMatch(AlgorithmBase):
     """
         FixMatch algorithm (https://arxiv.org/abs/2001.07685).
@@ -86,7 +87,7 @@ class FixMatch(AlgorithmBase):
                                           mask=mask)
 
             total_loss = sup_loss + self.lambda_u * unsup_loss
-            
+
         self.call_hook("param_update", "ParamUpdateHook", loss=total_loss)
 
         tb_dict = {}
