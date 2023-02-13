@@ -14,13 +14,8 @@ class SimMatch_Net(nn.Module):
     def __init__(self, base, proj_size=128, epass=False):
         super(SimMatch_Net, self).__init__()
         self.backbone = base
-<<<<<<< HEAD
-        self.feat_planes = base.num_features
         self.epass = epass
-        
-=======
         self.num_features = base.num_features
->>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033
         
         self.mlp_proj = nn.Sequential(*[
             nn.Linear(self.num_features, self.num_features),
