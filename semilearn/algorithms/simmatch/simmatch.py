@@ -26,15 +26,15 @@ class SimMatch_Net(nn.Module):
         
         if self.epass:
             self.mlp_proj_2 = nn.Sequential(*[
-                nn.Linear(self.feat_planes, self.feat_planes),
+                nn.Linear(self.num_features, self.num_features),
                 nn.ReLU(inplace=False),
-                nn.Linear(self.feat_planes, proj_size)
+                nn.Linear(self.num_features, proj_size)
             ])
             
             self.mlp_proj_3 = nn.Sequential(*[
-                nn.Linear(self.feat_planes, self.feat_planes),
+                nn.Linear(self.num_features, self.num_features),
                 nn.ReLU(inplace=False),
-                nn.Linear(self.feat_planes, proj_size)
+                nn.Linear(self.num_features, proj_size)
             ])
             
     def l2norm(self, x, power=2):
