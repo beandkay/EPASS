@@ -87,11 +87,7 @@ def get_imagenet(args, alg, name, num_labels, num_classes, data_dir='./data', in
 
     lb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, ulb=False, alg=alg, percentage=percentage)
 
-<<<<<<< HEAD
-    ulb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, alg=alg, ulb=True, medium_transform=transform_medium, strong_transform=transform_strong)
-=======
-    ulb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, alg=alg, ulb=True, strong_transform=transform_strong, include_lb_to_ulb=include_lb_to_ulb, lb_index=lb_dset.lb_idx)
->>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033
+    ulb_dset = ImagenetDataset(root=os.path.join(data_dir, "train"), transform=transform_weak, alg=alg, ulb=True, medium_transform=transform_medium, strong_transform=transform_strong, include_lb_to_ulb=include_lb_to_ulb, lb_index=lb_dset.lb_idx)
 
     eval_dset = ImagenetDataset(root=os.path.join(data_dir, "val"), transform=transform_val, alg=alg, ulb=False)
 
@@ -100,11 +96,7 @@ def get_imagenet(args, alg, name, num_labels, num_classes, data_dir='./data', in
 
 
 class ImagenetDataset(BasicDataset, ImageFolder):
-<<<<<<< HEAD
-    def __init__(self, root, transform, ulb, alg, medium_transform=None, strong_transform=None, num_labels=-1):
-=======
-    def __init__(self, root, transform, ulb, alg, strong_transform=None, percentage=-1, include_lb_to_ulb=True, lb_index=None):
->>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033
+    def __init__(self, root, transform, ulb, alg, medium_transform=None, strong_transform=None, percentage=-1, include_lb_to_ulb=True, lb_index=None):
         self.alg = alg
         self.is_ulb = ulb
         self.percentage = percentage
