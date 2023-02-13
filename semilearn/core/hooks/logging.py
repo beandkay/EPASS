@@ -27,11 +27,6 @@ class LoggingHook(Hook):
             if not algorithm.tb_log is None:
                 algorithm.tb_log.update(algorithm.log_dict, algorithm.it)
         
-<<<<<<< HEAD
-        # elif self.every_n_iters(algorithm, algorithm.num_log_iter):
-        #     if not algorithm.distributed or (algorithm.distributed and algorithm.rank % algorithm.ngpus_per_node == 0):
-        #         algorithm.print_fn(f"{algorithm.it + 1} iteration, USE_EMA: {algorithm.ema_m != 0}, {algorithm.tb_dict}")
-=======
         elif self.every_n_iters(algorithm, algorithm.num_log_iter):
             if not algorithm.distributed or (algorithm.distributed and algorithm.rank % algorithm.ngpus_per_node == 0):
                 print_text = f"{algorithm.it + 1} iteration USE_EMA: {algorithm.ema_m != 0}, "
@@ -42,4 +37,3 @@ class LoggingHook(Hook):
                     else:
                         print_text += " "
                 algorithm.print_fn(print_text)
->>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033

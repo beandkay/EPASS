@@ -24,6 +24,7 @@ class SimMatch_Net(nn.Module):
             , proj_size)
         ])
         
+<<<<<<< HEAD
         self.mlp_proj_2 = nn.Sequential(*[
             nn.Linear(self.feat_planes, self.feat_planes),
             nn.ReLU(inplace=False),
@@ -36,6 +37,21 @@ class SimMatch_Net(nn.Module):
             nn.Linear(self.feat_planes, proj_size)
         ])
         
+=======
+        if self.epass:
+            self.mlp_proj_2 = nn.Sequential(*[
+                nn.Linear(self.num_features, self.num_features),
+                nn.ReLU(inplace=False),
+                nn.Linear(self.num_features, proj_size)
+            ])
+            
+            self.mlp_proj_3 = nn.Sequential(*[
+                nn.Linear(self.num_features, self.num_features),
+                nn.ReLU(inplace=False),
+                nn.Linear(self.num_features, proj_size)
+            ])
+            
+>>>>>>> 33c2b02058607f7c96fe2d192f095090485f7ff2
     def l2norm(self, x, power=2):
         norm = x.pow(power).sum(1, keepdim=True).pow(1. / power)
         out = x.div(norm)
