@@ -5,13 +5,10 @@
 """
 from codecs import open
 from os import path
-<<<<<<< HEAD
-from setuptools import setup, find_packages
-=======
 import pathlib
 
 import pkg_resources
->>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033
+from setuptools import setup, find_packages
 
 here = path.abspath(path.dirname(__file__))
 
