@@ -36,7 +36,7 @@
 <!-- <h3 align="center">USB</h3> -->
 
 <p align="center">
-    <strong>USB</strong>: A Unified Semi-supervised learning Benchmark for CV, NLP, and Audio
+    <strong>USB</strong>: A Unified Semi-supervised learning Benchmark for CV, NLP, and Audio Classification
     <!-- <br />
     <a href="https://github.com/microsoft/Semi-supervised-learning"><strong>Explore the docs »</strong></a>
     <br /> -->
@@ -50,6 +50,14 @@
     <a href="https://usb.readthedocs.io/en/main/">Docs</a>
     ·
     <a href="https://github.com/microsoft/Semi-supervised-learning/issues">Issue</a>
+    ·
+    <a href="https://www.microsoft.com/en-us/research/lab/microsoft-research-asia/articles/pushing-the-limit-of-semi-supervised-learning-with-the-unified-semi-supervised-learning-benchmark/">Blog</a>
+    ·
+    <a href="https://zhuanlan.zhihu.com/p/566055279">Blog (Chinese)</a>
+    ·
+    <a href="https://nips.cc/virtual/2022/poster/55710">Video</a>
+    ·
+    <a href="https://www.bilibili.com/video/av474982872/">Video (Chinese)</a>
   </p>
 </div>
 
@@ -79,10 +87,15 @@
 <!-- News and Updates -->
 
 ## News and Updates
+- [01/30/2023] Update semilearn==0.3.0. Add [FreeMatch](https://arxiv.org/abs/2205.07246) and [SoftMatch](https://arxiv.org/abs/2301.10921). Add imbalanced algorithms. Update results and add wandb support. Refer [CHANGE_LOG](CHANGE_LOG.md) for details. [[Results]](https://github.com/microsoft/Semi-supervised-learning/tree/main/results)[[Logs]](https://drive.google.com/drive/folders/1bRSqrRyyuDafgOI3VAuqqiuzHG6CexHF?usp=sharing)[[Wandb]](https://wandb.ai/usb). Older classic logs can be found here: [[TorchSSL Log]](https://1drv.ms/u/s!AlpW9hcyb0KvmyCfsCjGvhDXG5Nb?e=Xc6amH).
+
+- [10/16/2022] Dataset download link and process instructions released! [[Datasets](https://github.com/microsoft/Semi-supervised-learning/tree/main/preprocess)]
+
+- [10/13/2022] We have finished the camera ready version with updated [[Results](https://github.com/microsoft/Semi-supervised-learning/tree/main/results)]. [[Openreview](https://openreview.net/forum?id=QeuwINa96C)]
+
+- [10/06/2022] Training logs and results of USB has been updated! Available dataset will be uploaded soon. [[Logs](https://drive.google.com/drive/folders/1fg3Fxem_UNWhfN5-4x2lRI3mluGxqD4N?usp=sharing)] [[Results](https://github.com/microsoft/Semi-supervised-learning/tree/main/results)]
 
 - [09/17/2022] The USB paper has been accepted by NeurIPS 2022 Dataset and Benchmark Track! [[Openreview](https://openreview.net/forum?id=QeuwINa96C)]
-
-- [09/02/2022] We are working on optimizing codes. We will share the logs and model checkpoints as we did in TorchSSL.
 
 - [08/21/2022] USB has been released!
 
@@ -91,6 +104,9 @@
 ## Introduction
 
 **USB** is a Pytorch-based Python package for Semi-Supervised Learning (SSL). It is easy-to-use/extend, *affordable* to small groups, and comprehensive for developing and evaluating SSL algorithms. USB provides the implementation of 14 SSL algorithms based on Consistency Regularization, and 15 tasks for evaluation from CV, NLP, and Audio domain.
+
+![Code Structure](./figures/code.png)
+
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -137,6 +153,14 @@ git clone https://github.com/microsoft/Semi-supervised-learning.git
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
+
+### Prepare Datasets
+
+The detailed instructions for downloading and processing are shown in [Dataset Download](./preprocess/). Please follow it to download datasets before running or developing algorithms.
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+
 <!-- USAGE EXAMPLES -->
 
 ## Usage
@@ -151,6 +175,36 @@ Please see [Installation](#installation) to install USB first. We provide colab 
 
 - [Beginning example](https://colab.research.google.com/drive/1lFygK31jWyTH88ktao6Ow-5nny5-B7v5)
 - [Customize datasets](https://colab.research.google.com/drive/1zbswPm1sM8j0fndUQOeqX2HADdYq-wOw)
+
+### Start with Docker
+
+**Step1: Check your environment**
+
+You need to properly install Docker and nvidia driver first. To use GPU in a docker container
+You also need to install nvidia-docker2 ([Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker)).
+Then, Please check your CUDA version via `nvidia-smi`
+
+**Step2: Clone the project**
+
+```shell
+git clone https://github.com/microsoft/Semi-supervised-learning.git
+```
+
+**Step3: Build the Docker image**
+
+Before building the image, you may modify the [Dockerfile](Dockerfile) according to your CUDA version.
+The CUDA version we use is 11.6. You can change the base image tag according to [this site](https://hub.docker.com/r/nvidia/cuda/tags).
+You also need to change the `--extra-index-url` according to your CUDA version in order to install the correct version of Pytorch.
+You can check the url through [Pytorch website](https://pytorch.org).
+
+Use this command to build the image
+
+```shell
+cd Semi-supervised-learning && docker build -t semilearn .
+```
+
+Job done. You can use the image you just built for your own project. Don't forget to use the argument `--gpu` when you want
+to use GPU in a container.
 
 ### Training
 
@@ -196,9 +250,7 @@ TODO: add pre-trained models.
 
 ## TODO
 
-- [ ] Add docker
 - [ ] Finish Readme
-- [ ] Compile docs and add usage example in docs
 - [ ] Updating SUPPORT.MD with content about this project's support experience
 - [ ] Multi-language Support
   - [ ] Chinese
@@ -271,17 +323,37 @@ The USB comunity is maintained by:
 
 ## Citing USB
 
-Please cite us if you fine USB helpful for your project/paper:
+Please cite us if you fine this project helpful for your project/paper:
 
 ```
 @inproceedings{usb2022,
   doi = {10.48550/ARXIV.2208.07204},
   url = {https://arxiv.org/abs/2208.07204},
   author = {Wang, Yidong and Chen, Hao and Fan, Yue and Sun, Wang and Tao, Ran and Hou, Wenxin and Wang, Renjie and Yang, Linyi and Zhou, Zhi and Guo, Lan-Zhe and Qi, Heli and Wu, Zhen and Li, Yu-Feng and Nakamura, Satoshi and Ye, Wei and Savvides, Marios and Raj, Bhiksha and Shinozaki, Takahiro and Schiele, Bernt and Wang, Jindong and Xie, Xing and Zhang, Yue},
-  keywords = {Machine Learning (cs.LG), Artificial Intelligence (cs.AI), Computer Vision and Pattern Recognition (cs.CV), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  title = {USB: A Unified Semi-supervised Learning Benchmark},
-  publisher = {arXiv},
+  title = {USB: A Unified Semi-supervised Learning Benchmark for Classification},
+  booktitle = {Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track}
   year = {2022}
+}
+
+@article{wang2023freematch},
+  title={FreeMatch: Self-adaptive Thresholding for Semi-supervised Learning},
+  author={Wang, Yidong and Chen, Hao and Heng, Qiang and Hou, Wenxin and Fan, Yue and and Wu, Zhen and Wang, Jindong and Savvides, Marios and Shinozaki, Takahiro and Raj, Bhiksha and Schiele, Bernt and Xie, Xing},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2023}
+}
+
+@article{chen2023softmatch},
+  title={SoftMatch: Addressing the Quantity-Quality Trade-off in Semi-supervised Learning},
+  author={Chen, Hao and Tao, Ran and Fan, Yue and Wang, Yidong and Wang, Jindong and Schiele, Bernt and Xie, Xing and Raj, Bhiksha and Savvides, Marios},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2023}
+}
+
+@article{zhang2021flexmatch},
+  title={FlexMatch: Boosting Semi-supervised Learning with Curriculum Pseudo Labeling},
+  author={Zhang, Bowen and Wang, Yidong and Hou, Wenxin and Wu, Hao and Wang, Jindong and Okumura, Manabu and Shinozaki, Takahiro},
+  booktitle={Neural Information Processing Systems (NeurIPS)},
+  year={2021}
 }
 ```
 

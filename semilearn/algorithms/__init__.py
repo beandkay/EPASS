@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+<<<<<<< HEAD
 
 from .fixmatch import FixMatch
 from .flexmatch import FlexMatch
@@ -43,18 +44,22 @@ name2alg = {
     # 'mpl': MPL
     'sequencematch': SequenceMatch,
 }
+=======
+from semilearn.core.utils import ALGORITHMS
+name2alg = ALGORITHMS
+>>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033
 
 def get_algorithm(args, net_builder, tb_log, logger):
-    try:
-        alg = name2alg[args.algorithm](
+    if args.algorithm in ALGORITHMS:
+        alg = ALGORITHMS[args.algorithm]( # name2alg[args.algorithm](
             args=args,
             net_builder=net_builder,
             tb_log=tb_log,
             logger=logger
         )
         return alg
-    except KeyError as e:
-        print(f'Unknown algorithm: {str(e)}')
+    else:
+        raise KeyError(f'Unknown algorithm: {str(args.algorithm)}')
 
 
 

@@ -7,22 +7,27 @@ from .hook import Hook
 
 
 class EvaluationHook(Hook):
-    def __init__(self) -> None:
-        super().__init__()
+    """
+    Evaluation Hook for valiation during training
+    """
     
     def after_train_step(self, algorithm):
         if self.every_n_iters(algorithm, algorithm.num_eval_iter) or self.is_last_iter(algorithm):
             algorithm.print_fn("validating...")
             eval_dict = algorithm.evaluate('eval')
-            algorithm.tb_dict.update(eval_dict)
+            algorithm.log_dict.update(eval_dict)
 
             # update best metrics
-            if algorithm.tb_dict['eval/top-1-acc'] > algorithm.best_eval_acc:
-                algorithm.best_eval_acc = algorithm.tb_dict['eval/top-1-acc']
+            if algorithm.log_dict['eval/top-1-acc'] > algorithm.best_eval_acc:
+                algorithm.best_eval_acc = algorithm.log_dict['eval/top-1-acc']
                 algorithm.best_it = algorithm.it
     
-
     def after_run(self, algorithm):
+        
+        if not algorithm.args.multiprocessing_distributed or (algorithm.args.multiprocessing_distributed and algorithm.args.rank % algorithm.ngpus_per_node == 0):
+            save_path = os.path.join(algorithm.save_dir, algorithm.save_name)
+            algorithm.save_model('latest_model.pth', save_path)
+
         results_dict = {'eval/best_acc': algorithm.best_eval_acc, 'eval/best_it': algorithm.best_it}
         if 'test' in algorithm.loader_dict:
             # load the best model and evaluate on test dataset
@@ -31,3 +36,4 @@ class EvaluationHook(Hook):
             test_dict = algorithm.evaluate('test')
             results_dict['test/best_acc'] = test_dict['test/top-1-acc']
         algorithm.results_dict = results_dict
+        

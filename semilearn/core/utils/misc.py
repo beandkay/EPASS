@@ -36,7 +36,7 @@ def setattr_cls_from_kwargs(cls, kwargs):
         setattr(cls, key, kwargs[key])
 
 
-def send_model_cuda(args, model):
+def send_model_cuda(args, model, clip_batch=True):
     if not torch.cuda.is_available():
         raise Exception('ONLY GPU TRAINING IS SUPPORTED')
     elif args.distributed:
@@ -49,7 +49,8 @@ def send_model_cuda(args, model):
             batch_size: batch_size per node -> batch_size per gpu
             workers: workers per node -> workers per gpu
             '''
-            args.batch_size = int(args.batch_size / ngpus_per_node)
+            if clip_batch:
+                args.batch_size = int(args.batch_size / ngpus_per_node)
             model.cuda(args.gpu)
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model = torch.nn.parallel.DistributedDataParallel(model, broadcast_buffers=False,
@@ -87,17 +88,17 @@ class TBLog:
             self.writer = SummaryWriter(os.path.join(self.tb_dir, file_name))
             
 
-    def update(self, tb_dict, it, suffix=None, mode="train"):
+    def update(self, log_dict, it, suffix=None, mode="train"):
         """
         Args
-            tb_dict: contains scalar values for updating tensorboard
+            log_dict: contains scalar values for updating tensorboard
             it: contains information of iteration (int).
             suffix: If not None, the update key has the suffix.
         """
         if suffix is None:
             suffix = ''
         if self.use_tensorboard:
-            for key, value in tb_dict.items():
+            for key, value in log_dict.items():
                 self.writer.add_scalar(suffix + key, value, it)
 
 
