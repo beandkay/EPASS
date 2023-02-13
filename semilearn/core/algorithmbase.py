@@ -348,6 +348,7 @@ class AlgorithmBase:
                 y_true.extend(y.cpu().tolist())
                 y_pred.extend(torch.max(logits, dim=-1)[1].cpu().tolist())
                 y_logits.append(logits.cpu().numpy())
+                y_probs.extend(torch.softmax(logits, dim=-1).cpu().tolist())
                 total_loss += loss.item() * num_batch
         y_true = np.array(y_true)
         y_pred = np.array(y_pred)
