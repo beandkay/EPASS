@@ -82,12 +82,8 @@ def get_config():
     ## core algorithm setting
     parser.add_argument('-alg', '--algorithm', type=str, default='fixmatch', help='ssl algorithm')
     parser.add_argument('--use_cat', type=str2bool, default=True, help='use cat operation in algorithms')
-<<<<<<< HEAD
     parser.add_argument('--use_amp', type=str2bool, default=False, help='use mixed precision training or not')
     parser.add_argument('--use_epass', type=str2bool, default=False, help='use ensemble projectors')
-=======
-    parser.add_argument('--amp', type=str2bool, default=False, help='use mixed precision training or not')
->>>>>>> c9709aa50394658aa4b2666a34c6179d22b18033
     parser.add_argument('--clip_grad', type=float, default=0)
 
     ## imbalance algorithm setting
