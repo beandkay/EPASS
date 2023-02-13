@@ -4,6 +4,9 @@ saved_models/
 pretrained_weights/
 ssl_nlp_datasets/
 back_translate_models/
+results/
+plot*
+draw*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
