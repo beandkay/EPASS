@@ -44,7 +44,10 @@ class SimMatch_Net(nn.Module):
     def forward(self, x, **kwargs):
         feat = self.backbone(x, only_feat=True)
         logits = self.backbone(feat, only_fc=True)
-        feat_proj = self.l2norm((self.mlp_proj(feat) + self.mlp_proj_2(feat) + self.mlp_proj_3(feat))/3)
+        if self.epass:
+            feat_proj = self.l2norm((self.mlp_proj(feat) + self.mlp_proj_2(feat) + self.mlp_proj_3(feat))/3)
+        else:
+            feat_proj = self.l2norm(self.mlp_proj(feat))
         return {'logits':logits, 'feat':feat_proj}
 
     def group_matcher(self, coarse=False):
