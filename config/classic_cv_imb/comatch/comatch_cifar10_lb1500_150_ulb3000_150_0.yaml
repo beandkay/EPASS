@@ -50,6 +50,6 @@ dist_url: tcp://127.0.0.1:10137
 dist_backend: nccl
 gpu: None
 include_lb_to_ulb: False
-lb_imb_ratio: 50
-ulb_imb_ratio: 50
+lb_imb_ratio: 150
+ulb_imb_ratio: 150
 ulb_num_labels: 3000
