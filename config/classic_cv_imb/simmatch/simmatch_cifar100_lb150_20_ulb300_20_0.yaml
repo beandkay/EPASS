@@ -32,7 +32,7 @@ layer_decay: 1.0
 amp: False
 clip: 0.0
 use_cat: True
-net: wrn_28_2
+net: wrn_28_8
 net_from_name: False
 use_epass: True
 data_dir: /home/data
