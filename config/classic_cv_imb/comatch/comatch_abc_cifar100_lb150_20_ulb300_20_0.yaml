@@ -16,7 +16,7 @@ eval_batch_size: 256
 contrast_p_cutoff: 0.8
 contrast_loss_ratio: 1.0
 ulb_loss_ratio: 1.0
-proj_size: 64
+proj_size: 512
 queue_batch: 5
 smoothing_alpha: 0.9
 uratio: 2
