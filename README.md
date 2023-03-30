@@ -133,6 +133,12 @@ then use pip to install required packages:
 pip install -r requirements.txt
 ```
 
+From now on, you can start use USB by typing 
+
+```sh
+python train.py --c config/usb_cv/fixmatch/fixmatch_cifar100_200_0.yaml
+```
+
 ### Installation
 
 We provide a Python package *semilearn* of USB for users who want to start training/testing the supported SSL algorithms on their data quickly:
@@ -165,7 +171,7 @@ The detailed instructions for downloading and processing are shown in [Dataset D
 
 ## Usage
 
-USB is easy to use and extend. Going through the belowing examples will help you faimiliar with USB for quick use, evaluate an exsiting SSL algorithm on your own dataset, or developing new SSL algorithms.
+USB is easy to use and extend. Going through the bellowing examples will help you familiar with USB for quick use, evaluate an existing SSL algorithm on your own dataset, or developing new SSL algorithms.
 
 ### Quick Start with USB package
 
@@ -208,7 +214,7 @@ to use GPU in a container.
 
 ### Training
 
-Here is an example to train FixMatch on CIFAR-100 with 200 labels. Trianing other supported algorithms (on other datasets with different label settings) can be specified by a config file:
+Here is an example to train FixMatch on CIFAR-100 with 200 labels. Training other supported algorithms (on other datasets with different label settings) can be specified by a config file:
 
 ```sh
 python train.py --c config/usb_cv/fixmatch/fixmatch_cifar100_200_0.yaml
@@ -216,7 +222,7 @@ python train.py --c config/usb_cv/fixmatch/fixmatch_cifar100_200_0.yaml
 
 ### Evaluation
 
-After trianing, you can check the evaluation performance on training logs, or running evaluation script:
+After training, you can check the evaluation performance on training logs, or running evaluation script:
 
 ```
 python eval.py --dataset cifar100 --num_classes 100 --load_path /PATH/TO/CHECKPOINT
@@ -335,21 +341,21 @@ Please cite us if you fine this project helpful for your project/paper:
   year = {2022}
 }
 
-@article{wang2023freematch},
+@article{wang2023freematch,
   title={FreeMatch: Self-adaptive Thresholding for Semi-supervised Learning},
   author={Wang, Yidong and Chen, Hao and Heng, Qiang and Hou, Wenxin and Fan, Yue and and Wu, Zhen and Wang, Jindong and Savvides, Marios and Shinozaki, Takahiro and Raj, Bhiksha and Schiele, Bernt and Xie, Xing},
   booktitle={International Conference on Learning Representations (ICLR)},
   year={2023}
 }
 
-@article{chen2023softmatch},
+@article{chen2023softmatch,
   title={SoftMatch: Addressing the Quantity-Quality Trade-off in Semi-supervised Learning},
   author={Chen, Hao and Tao, Ran and Fan, Yue and Wang, Yidong and Wang, Jindong and Schiele, Bernt and Xie, Xing and Raj, Bhiksha and Savvides, Marios},
   booktitle={International Conference on Learning Representations (ICLR)},
   year={2023}
 }
 
-@article{zhang2021flexmatch},
+@article{zhang2021flexmatch,
   title={FlexMatch: Boosting Semi-supervised Learning with Curriculum Pseudo Labeling},
   author={Zhang, Bowen and Wang, Yidong and Hou, Wenxin and Wu, Hao and Wang, Jindong and Okumura, Manabu and Shinozaki, Takahiro},
   booktitle={Neural Information Processing Systems (NeurIPS)},

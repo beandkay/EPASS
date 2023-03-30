@@ -86,7 +86,7 @@ class SimMatch(AlgorithmBase):
     """
     def __init__(self, args, net_builder, tb_log=None, logger=None):
         super().__init__(args, net_builder, tb_log, logger) 
-        # simmatch specificed arguments
+        # simmatch specified arguments
         # adjust k 
         self.use_ema_teacher = True
         if args.dataset in ['stl10', 'cifar10', 'cifar100', 'svhn', 'superks', 'tissuemnist', 'eurosat', 'superbks', 'esc50', 'gtzan', 'urbansound8k', 'aclImdb', 'ag_news', 'dbpedia']:
@@ -106,7 +106,7 @@ class SimMatch(AlgorithmBase):
         self.da_len = da_len
 
         # TODO：move this part into a hook
-        # memeory bank
+        # memory bank
         self.mem_bank = torch.randn(proj_size, K).cuda(self.gpu)
         self.mem_bank = F.normalize(self.mem_bank, dim=0)
         self.labels_bank = torch.zeros(K, dtype=torch.long).cuda(self.gpu)
