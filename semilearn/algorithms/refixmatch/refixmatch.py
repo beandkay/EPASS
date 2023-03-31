@@ -6,9 +6,7 @@
 import torch
 from semilearn.core import AlgorithmBase
 from semilearn.algorithms.hooks import PseudoLabelingHook, FixedThresholdingHook
-from semilearn.algorithms.utils import ce_loss, consistency_loss, SSL_Argument, str2bool
-import numpy as np
-import torch.nn.functional as F
+from semilearn.algorithms.utils import SSL_Argument, str2bool
 
 
 class ReFixMatch(AlgorithmBase):
@@ -65,7 +63,7 @@ class ReFixMatch(AlgorithmBase):
                     outs_x_ulb_w = self.model(x_ulb_w)
                     logits_x_ulb_w = outs_x_ulb_w['logits']
 
-            sup_loss = ce_loss(logits_x_lb, y_lb, reduction='mean')
+            sup_loss = self.ce_loss(logits_x_lb, y_lb, reduction='mean')
             
             probs_x_ulb_w = torch.softmax(logits_x_ulb_w, dim=-1)
             # if distribution alignment hook is registered, call it 
@@ -83,12 +81,12 @@ class ReFixMatch(AlgorithmBase):
                                           T=self.T,
                                           softmax=False)
 
-            unsup_loss = consistency_loss(logits_x_ulb_s,
+            unsup_loss = self.consistency_loss(logits_x_ulb_s,
                                           pseudo_label,
                                           'ce',
                                           mask=mask)
 
-            unsup_loss_refix = consistency_loss(logits_x_ulb_s,
+            unsup_loss_refix = self.consistency_loss(logits_x_ulb_s,
                                           probs_x_ulb_w,
                                           'kl',
                                           mask=mask)

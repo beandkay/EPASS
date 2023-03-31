@@ -8,7 +8,7 @@ from semilearn.algorithms.flexmatch.utils import FlexMatchThresholdingHook
 
 from semilearn.core import AlgorithmBase
 from semilearn.algorithms.hooks import PseudoLabelingHook
-from semilearn.algorithms.utils import ce_loss, consistency_loss, SSL_Argument, str2bool
+from semilearn.algorithms.utils import SSL_Argument, str2bool
 import torch.nn.functional as F
 
 
@@ -76,7 +76,7 @@ class SequenceMatch(AlgorithmBase):
                     outs_x_ulb_w = self.model(x_ulb_w)
                     logits_x_ulb_w = outs_x_ulb_w['logits']
 
-            sup_loss = ce_loss(logits_x_lb, y_lb, reduction='mean')
+            sup_loss = self.ce_loss(logits_x_lb, y_lb, reduction='mean')
 
             # compute mask
             mask = self.call_hook("masking", "MaskingHook", logits_x_ulb=logits_x_ulb_w, idx_ulb=idx_ulb)
@@ -87,7 +87,7 @@ class SequenceMatch(AlgorithmBase):
                                           use_hard_label=self.use_hard_label,
                                           T=self.T)
 
-            unsup_loss = consistency_loss(logits_x_ulb_s,
+            unsup_loss = self.consistency_loss(logits_x_ulb_s,
                                           pseudo_label,
                                           'ce',
                                           mask=mask)
