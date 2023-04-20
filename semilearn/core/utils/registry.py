@@ -66,7 +66,7 @@ ALL_MODULES = [
     # NOTE: add all algorithms here
     ('semilearn.algorithms', ['adamatch', 'comatch', 'crmatch', 'dash', 'fixmatch', 'flexmatch', 'fullysupervised', 'meanteacher',
                               'mixmatch', 'pimodel', 'pseudolabel', 'remixmatch', 'simmatch', 'uda', 'vat', 'softmatch', 'freematch',
-                              'sequencematch', 'refixmatch', 'somematch']),
+                              'sequencematch', 'refixmatch']),
     ('semilearn.imb_algorithms', ['abc', 'cossl', 'adsh', 'crest', 'darp', 'daso', 'debiaspl', 'saw', 'tras'])
 ]
 

@@ -9,6 +9,7 @@ from semilearn.algorithms.hooks import PseudoLabelingHook, FixedThresholdingHook
 from semilearn.algorithms.utils import SSL_Argument, str2bool
 
 
+@ALGORITHMS.register('refixmatch')
 class ReFixMatch(AlgorithmBase):
     """
         ReFixMatch algorithm (https://arxiv.org/abs/2001.07685).

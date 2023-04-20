@@ -12,6 +12,7 @@ from semilearn.algorithms.utils import SSL_Argument, str2bool
 import torch.nn.functional as F
 
 
+@ALGORITHMS.register('sequencematch')
 class SequenceMatch(AlgorithmBase):
     """
         SequenceMatch algorithm (https://arxiv.org/abs/2110.08263).
