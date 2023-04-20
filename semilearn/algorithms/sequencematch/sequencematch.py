@@ -5,8 +5,8 @@
 import torch
 
 from semilearn.algorithms.flexmatch.utils import FlexMatchThresholdingHook
-
-from semilearn.core import AlgorithmBase
+from semilearn.core.algorithmbase import AlgorithmBase
+from semilearn.core.utils import ALGORITHMS
 from semilearn.algorithms.hooks import PseudoLabelingHook
 from semilearn.algorithms.utils import SSL_Argument, str2bool
 import torch.nn.functional as F
